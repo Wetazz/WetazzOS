@@ -1,0 +1,129 @@
+{
+  "theme": "dark",
+  "archetype": "THE PERFORMANCE PRO",
+  "typography": {
+    "headings": {
+      "font": "Barlow Condensed",
+      "weights": ["600", "900"],
+      "styling": "tracking-tighter uppercase"
+    },
+    "body": {
+      "font": "Manrope",
+      "weights": ["400", "500", "700"],
+      "styling": "tracking-wide"
+    },
+    "mono": {
+      "font": "JetBrains Mono",
+      "weights": ["400", "600"],
+      "usage": "Data points, job numbers, VINs, invoice items"
+    }
+  },
+  "colors": {
+    "primary": "#FF3B30",
+    "primary_hover": "#FF5B52",
+    "background": {
+      "default": "#0A0A0A",
+      "paper": "#141414",
+      "glass": "rgba(20, 20, 20, 0.7)"
+    },
+    "text": {
+      "primary": "#FFFFFF",
+      "secondary": "#A1A1AA",
+      "accent": "#FF3B30"
+    },
+    "status": {
+      "success": "#10B981",
+      "warning": "#F59E0B",
+      "error": "#EF4444",
+      "info": "#3B82F6"
+    },
+    "border": "#27272A"
+  },
+  "visual_enhancers": {
+    "surfaces": "Tactical Minimalism. 1px solid strokes or 2px inner glow highlights instead of soft shadows.",
+    "textures": "Subtle noise overlay on dark backgrounds to give an industrial matte feel.",
+    "glassmorphism": "Used only in sticky navigation and floating actionable modals. Dark background bg-black/60 with backdrop-blur-xl and border-white/10.",
+    "neumorphism": "Avoid completely. Use Grid Borders for data-heavy dashboard sections (Kanban, tables)."
+  },
+  "grids": {
+    "marketing": "MODE A: THE 'TETRIS' GRID. Asymmetry, Visual Tension. grid-cols-1 md:grid-cols-12 gap-8.",
+    "dashboard": "MODE B: HIGH DENSITY GRID. Dense, data correlation. grid-cols-1 md:grid-cols-4 gap-4."
+  },
+  "layouts": {
+    "marketing_pages": "Use large typography, hero image with bg-black/40 overlay. Parallax scrolling for vehicle sections. Left-aligned content, generous spacing (p-16 to p-32).",
+    "dashboard_os": "Collapsible left sidebar with top filter bar. Primary KPI hero row. High density, F-pattern scanning. Jobs Kanban uses horizontal scroll with vertical lists.",
+    "customer_portal": "Cardless, rectangular, dense styles. Clean, straightforward forms for booking and quoting."
+  },
+  "motion": {
+    "interactions": "Hover states on all interactive elements. Subtle lift (-translate-y-1) for cards. Progress bars and AI estimation steps use staggered entrance animations.",
+    "transitions": "Use specific properties: transition-transform duration-200 ease-out. Exclude transforms from universal transitions.",
+    "page_load": "Framer Motion staggered children for list items in Kanban and Inventory."
+  },
+  "accessibility": {
+    "contrast": "Ensure APCA contrast ratios. Minimum 4.5:1 for normal text. Explicitly set text color on hover (e.g., hover:bg-slate-800 hover:text-white).",
+    "focus": "focus:ring-2 focus:ring-primary focus:outline-none on all inputs and buttons.",
+    "motion": "Respect prefers-reduced-motion for all heavy animations."
+  },
+  "component_guidelines": {
+    "navigation": "Always visible nav. Glassmorphism dark header on marketing site. Left sidebar for the SaaS dashboard.",
+    "buttons": "Sharp edges (rounded-none or max rounded-sm). High-saturation accent blocks.",
+    "forms": "Shadcn components heavily customized to match the tactical theme. Use Shadcn Calendar and Select.",
+    "kanban": "Drag-and-drop columns. Use framer-motion for drag feedback. Explicit states: Enquiry, Booked, Inspection, Quote, Authorised, In Progress, Waiting Parts, QC, Ready, Completed.",
+    "toasts": "Use sonner for notifications. Position bottom-right for OS, top-center for public site."
+  },
+  "media": {
+    "images": "High-quality, realistic automotive and mechanic scenes. Never use placeholder URLs.",
+    "icons": "Phosphor Icons for marketing pages. lucide-react for standard dashboard icons.",
+    "overlays": "Images must have dark gradient overlays (bg-gradient-to-t from-black/80 to-transparent) to ensure text readability."
+  },
+  "3d_libraries": {
+    "recommendation": "React Three Fiber + Drei for the 'AI photo-based preliminary estimating' feature to show a 3D wireframe or scanning effect of a car. Use standard 2D components for the rest of the OS for performance.",
+    "fallback": "Framer Motion for 2D scanning animations over damage photos if 3D is too heavy."
+  },
+  "image_urls": {
+    "hero_marketing": {
+      "url": "https://images.unsplash.com/photo-1615906655593-ad0386982a0f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNTl8MHwxfHNlYXJjaHwxfHxtZWNoYW5pYyUyMHdvcmtpbmclMjBvbiUyMGNhcnxlbnwwfHx8fDE3ODY1NDM5NjB8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Mechanic working on car engine. Use for main public homepage hero."
+    },
+    "about_workshop": {
+      "url": "https://images.pexels.com/photos/4489761/pexels-photo-4489761.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Mechanic performing repairs. Use for About Us section."
+    },
+    "ai_damage_estimate": {
+      "url": "https://images.unsplash.com/photo-1662541547523-118842914aa7?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTJ8MHwxfHNlYXJjaHwyfHxjYXIlMjBzY3JhdGNoJTIwZGFtYWdlfGVufDB8fHx8MTc4NjU0Mzk2MHww&ixlib=rb-4.1.0&q=85",
+      "description": "Smashed front end. Use as the demo image for the AI preliminary estimating feature."
+    },
+    "customer_portal_bg": {
+      "url": "https://images.unsplash.com/photo-1596986952526-3be237187071?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTF8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBhdXRvJTIwd29ya3Nob3B8ZW58MHx8fHwxNzg2NTQzOTYwfDA&ixlib=rb-4.1.0&q=85",
+      "description": "Modern dark garage. Use as background for login/signup and customer portal hero."
+    },
+    "gallery_1": {
+      "url": "https://images.unsplash.com/photo-1572281335102-5f780686ee91?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1ODF8MHwxfHNlYXJjaHw0fHxzcG9ydHMlMjBjYXIlMjBnYXJhZ2V8ZW58MHx8fHwxNzg2NTQzOTYwfDA&ixlib=rb-4.1.0&q=85",
+      "description": "Black convertible coupe. Use in services/gallery."
+    },
+    "gallery_2": {
+      "url": "https://images.pexels.com/photos/10182861/pexels-photo-10182861.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Silver car parked indoors. Use in services/gallery."
+    }
+  },
+  "instructions_to_main_agent": [
+    "Strictly adhere to the tactical minimalism style. Avoid excessive drop shadows; use 1px borders to separate components in the OS.",
+    "Always use the provided image URLs. Do not use generic placeholders like via.placeholder.com.",
+    "In the SaaS Dashboard, implement a collapsible left sidebar with top-left north star metrics.",
+    "For the Kanban board, ensure smooth drag-and-drop interactions using framer-motion.",
+    "The AI photo estimator section should have a technical/scanning UI overlay (using ASCII art or grid overlays) to emphasize 'AI'.",
+    "All interactive elements MUST have `data-testid` attributes (e.g., `data-testid=\"login-submit-button\"`).",
+    "Use Shadcn components for forms, tables, and dialogs, but strip out the default Vercel aesthetic in favor of the dark, industrial brand theme.",
+    "Implement both the public marketing site and the internal OS routes cleanly.",
+    "Ensure the hero image has a dark overlay (`bg-black/50`) so text is readable."
+  ],
+  "universal_guidelines": [
+    "DO NOT use generic centered layouts. Use asymmetrical grids for marketing and high-density grids for dashboards.",
+    "Use glass-morphism effects (bg-black/60 backdrop-blur-xl) for floating elements like sticky navs and dialogs.",
+    "Never apply `transition: all`. Target specific properties like `transition-transform transition-opacity`.",
+    "DO NOT center align the app container. Respect natural reading flow.",
+    "Use `sonner` for toast notifications.",
+    "Never use AI assistant Emoji characters (\ud83e\udd16\ud83e\udde0\ud83d\udca1) for icons. Use proper icon libraries.",
+    "Do not use complete transparent background in header, overlays, any surface that has content under it. Example: Dropdown with transparent background"
+  ]
+}

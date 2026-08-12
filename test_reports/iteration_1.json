@@ -1,0 +1,50 @@
+{
+  "summary": "First-finish smoke test of WETAZZ OS. 27 backend checks executed against public API, plus frontend home/login/dashboard verified. Almost all backend endpoints work (seed, business, login, CRM CRUD, vehicles, guest+auth bookings, jobs CRUD + status + labour timers + detail, quotes with GST calc, quote status flow, invoices, comms, reviews + low-rating alert, staff CRUD, analytics, Stripe DEPOSIT+INVOICE checkout w/ session URL, payment status, rego/VIN lookup NOT_CONFIGURED, RBAC 403). One CRITICAL bug: POST /api/auth/signup returns 500 (ObjectId serialization). AI photo-estimate returns 500 with tiny 1x1 png (low priority per request); AI assistant chat returns reply OK. Frontend home hero renders, owner login redirects to /os dashboard with all tiles + kanban buckets showing live data.",
+  "tested_scope": ["backend", "frontend", "auth", "integration"],
+  "passed": [
+    "POST /api/seed idempotent",
+    "GET /api/business",
+    "POST /api/auth/login owner returns JWT",
+    "POST /api/customers (staff)",
+    "GET /api/customers list",
+    "RBAC: customer -> /customers returns 403",
+    "POST /api/vehicles + list",
+    "POST /api/bookings guest (no auth) creates lead+customer+vehicle",
+    "GET /api/bookings (staff)",
+    "POST /api/jobs, PATCH /jobs/{id}/status, labour start/stop, GET /jobs/{id} detail includes quotes+invoices+communications",
+    "POST /api/quotes returns gst=67.5 total=742.5 (10% GST correct)",
+    "PATCH /api/quotes/{id}/status SENT (staff)",
+    "POST /api/invoices",
+    "POST /api/communications + GET list",
+    "POST /api/reviews/request",
+    "POST /api/staff (owner), GET /api/staff",
+    "GET /api/analytics/dashboard returns status_counts + counts",
+    "POST /api/payments/checkout DEPOSIT + INVOICE return checkout_url",
+    "GET /api/payments/status/{sid}",
+    "GET /api/vehicles/lookup + /vin -> NOT_CONFIGURED",
+    "POST /api/ai/assistant returns reply",
+    "Frontend home page hero renders (Wetazz, Precision Paint...)",
+    "Frontend /login with owner@wetazz.com.au -> redirects to /os dashboard with tiles (Open Jobs, Receivable, Jobs by Status buckets) visible"
+  ],
+  "failed": [
+    {
+      "area": "backend/auth",
+      "issue": "POST /api/auth/signup returns HTTP 500 due to ObjectId serialization. Root cause: signup() inserts `doc` into db.users and then returns `{'user': {k:v for k,v in doc.items() if k != 'password'}}` — but does NOT pop `_id` that motor mutates onto the dict after insert_one, so FastAPI's jsonable_encoder fails with `TypeError: 'ObjectId' object is not iterable`. Fix: add `doc.pop('_id', None)` (and same for `cust`) before building the response in /api/auth/signup.",
+      "evidence": "backend.err.log: ValueError: [TypeError(\"'ObjectId' object is not iterable\")] at fastapi/encoders.py while serializing signup response.",
+      "priority": "HIGH"
+    },
+    {
+      "area": "backend/ai",
+      "issue": "POST /api/ai/photo-estimate returns 500 when given a 1x1 png (likely Claude rejects tiny/blank image). Endpoint raises HTTPException(500) instead of gracefully returning `{raw:'', estimate:null, disclaimer:...}`. Consider wrapping in try/except and returning disclaimer + null estimate so frontend can still show the disclaimer panel.",
+      "evidence": "500 response body did not contain 'disclaimer'.",
+      "priority": "LOW"
+    }
+  ],
+  "action_items": [
+    "Fix POST /api/auth/signup: pop `_id` from `doc` and `cust` before returning (blocks customer signup flow, portal redirect test, and customer-side quote approve E2E)",
+    "Optional: make /api/ai/photo-estimate degrade gracefully on AI upstream failure so UI still renders disclaimer"
+  ],
+  "success_rate": {"backend": "96% (26/27, signup fail; ai-photo low priority)", "frontend": "100% of smoke checks executed (home + owner login + dashboard)"},
+  "retest_needed": true,
+  "full_testing_deferred": true
+}
