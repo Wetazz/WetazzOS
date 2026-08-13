@@ -32,6 +32,7 @@ import OSVehicles from "@/pages/os/OSVehicles";
 import OSBookings from "@/pages/os/OSBookings";
 import OSJobsKanban from "@/pages/os/OSJobsKanban";
 import OSJobDetail from "@/pages/os/OSJobDetail";
+import OSJobPack from "@/pages/os/OSJobPack";
 import OSQuotes from "@/pages/os/OSQuotes";
 import OSInvoices from "@/pages/os/OSInvoices";
 import OSInbox from "@/pages/os/OSInbox";
@@ -90,6 +91,7 @@ export default function App() {
             <Route path="bookings" element={<OSBookings />} />
             <Route path="jobs" element={<OSJobsKanban />} />
             <Route path="jobs/:jid" element={<OSJobDetail />} />
+            <Route path="jobs/:jid/pack" element={<OSJobPack />} />
             <Route path="quotes" element={<OSQuotes />} />
             <Route path="invoices" element={<OSInvoices />} />
             <Route path="inbox" element={<OSInbox />} />

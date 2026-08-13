@@ -6,6 +6,8 @@ export default function OSQuotes() {
   const [rows, setRows] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [vehicles, setVehicles] = useState([]);
+  const [parts, setParts] = useState([]);
+  const [partQuery, setPartQuery] = useState("");
   const [show, setShow] = useState(false);
   const [f, setF] = useState({ customer_id:"", vehicle_id:"", deposit_required:"0", notes:"" });
   const [items, setItems] = useState([{ kind:"LABOUR", description:"Labour", quantity:1, unit_price:135, total:135 }]);
@@ -13,9 +15,11 @@ export default function OSQuotes() {
   const load = () => api.get("/quotes").then(r => setRows(r.data));
   useEffect(() => { load(); api.get("/customers").then(r=>setCustomers(r.data)); }, []);
   useEffect(() => { if (f.customer_id) api.get("/vehicles", { params: { customer_id: f.customer_id } }).then(r=>setVehicles(r.data)); }, [f.customer_id]);
+  useEffect(() => { const t=setTimeout(()=>api.get("/parts", { params: { q: partQuery }}).then(r=>setParts(r.data.slice(0,8))), 150); return ()=>clearTimeout(t); }, [partQuery]);
 
   const setItem = (i, patch) => setItems(items.map((it, idx) => idx===i ? {...it, ...patch, total: (patch.quantity ?? it.quantity) * (patch.unit_price ?? it.unit_price)} : it));
   const addItem = () => setItems([...items, { kind:"PART", description:"", quantity:1, unit_price:0, total:0 }]);
+  const addPartToQuote = (p) => setItems([...items, { kind:"PART", description:`${p.part_number} — ${p.description}`, quantity:1, unit_price:p.selling_price, total:p.selling_price, part_id:p.id, cost:p.cost }]);
   const removeItem = (i) => setItems(items.filter((_,idx)=>idx!==i));
 
   const submit = async (e) => {
@@ -35,7 +39,7 @@ export default function OSQuotes() {
     <div className="p-8">
       <div className="flex items-baseline justify-between mb-6">
         <h1 className="font-display text-4xl">Quotes</h1>
-        <button data-testid="new-quote-btn" onClick={()=>setShow(true)} className="px-4 py-2 bg-[#B5FF2E] hover:bg-[#C8FF5A] uppercase text-sm font-bold">+ New quote</button>
+        <button data-testid="new-quote-btn" onClick={()=>setShow(true)} className="px-4 py-2 bg-[#B5FF2E] hover:bg-[#C8FF5A] text-black uppercase text-sm font-bold">+ New quote</button>
       </div>
 
       {show && (
@@ -45,6 +49,22 @@ export default function OSQuotes() {
             <select required data-testid="qt-vehicle" value={f.vehicle_id} onChange={e=>setF({...f,vehicle_id:e.target.value})} className="wz-i"><option value="">Vehicle...</option>{vehicles.map(v=><option key={v.id} value={v.id}>{v.make} {v.model}</option>)}</select>
             <input placeholder="Deposit A$" value={f.deposit_required} onChange={e=>setF({...f,deposit_required:e.target.value})} className="wz-i" data-testid="qt-deposit"/>
           </div>
+
+          <div className="border border-white/10 p-3">
+            <div className="text-[10px] uppercase tracking-widest text-[#B5FF2E] mb-2">// Parts catalog</div>
+            <input data-testid="qt-part-search" placeholder="Search parts by number, OEM or description..." value={partQuery} onChange={e=>setPartQuery(e.target.value)} className="wz-i w-full mb-2"/>
+            <div className="grid md:grid-cols-2 gap-1 max-h-40 overflow-y-auto">
+              {parts.map(p => (
+                <button type="button" key={p.id} onClick={()=>addPartToQuote(p)} data-testid={`qt-part-${p.id}`}
+                  className="text-left border border-white/10 hover:border-[#B5FF2E] p-2 flex justify-between text-xs">
+                  <span><span className="font-mono text-[#B5FF2E]">{p.part_number}</span> · {p.description}</span>
+                  <span className="font-mono">A${p.selling_price?.toFixed(2)} <span className="text-zinc-500">({p.stock} in stock)</span></span>
+                </button>
+              ))}
+              {!parts.length && <div className="text-zinc-500 text-xs p-2">No parts. Add via /os/parts.</div>}
+            </div>
+          </div>
+
           <div className="space-y-2">
             {items.map((it, i) => (
               <div key={i} className="grid grid-cols-12 gap-2">
@@ -59,7 +79,7 @@ export default function OSQuotes() {
             <button type="button" onClick={addItem} className="text-xs uppercase tracking-widest text-[#B5FF2E]" data-testid="qt-add-item">+ Add line</button>
           </div>
           <div className="text-sm font-mono text-right">Subtotal A${subtotal.toFixed(2)} · GST A${gst.toFixed(2)} · <span className="text-[#B5FF2E]">Total A${total.toFixed(2)}</span></div>
-          <div className="flex gap-2 justify-end"><button type="button" onClick={()=>setShow(false)} className="px-4 py-2 border border-white/20 uppercase text-sm">Cancel</button><button data-testid="qt-submit" className="px-4 py-2 bg-[#B5FF2E] hover:bg-[#C8FF5A] uppercase text-sm font-bold">Create quote</button></div>
+          <div className="flex gap-2 justify-end"><button type="button" onClick={()=>setShow(false)} className="px-4 py-2 border border-white/20 uppercase text-sm">Cancel</button><button data-testid="qt-submit" className="px-4 py-2 bg-[#B5FF2E] hover:bg-[#C8FF5A] text-black uppercase text-sm font-bold">Create quote</button></div>
         </form>
       )}
 
@@ -72,7 +92,7 @@ export default function OSQuotes() {
             </div>
             <div className="flex items-center gap-3">
               <div className="text-xs uppercase text-[#B5FF2E]">{q.status}</div>
-              {q.status === "DRAFT" && <button data-testid={`qt-send-${q.id}`} onClick={()=>send(q.id)} className="px-3 py-1 bg-[#B5FF2E] hover:bg-[#C8FF5A] uppercase text-xs">Send</button>}
+              {q.status === "DRAFT" && <button data-testid={`qt-send-${q.id}`} onClick={()=>send(q.id)} className="px-3 py-1 bg-[#B5FF2E] hover:bg-[#C8FF5A] text-black uppercase text-xs">Send</button>}
             </div>
           </div>
         ))}

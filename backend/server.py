@@ -393,6 +393,15 @@ async def global_search(q: str, user=Depends(require_roles(*STAFF_ROLES))):
 # ============================================================
 @api.post("/bookings")
 async def create_booking(data: BookingIn, cred: Optional[HTTPAuthorizationCredentials] = Depends(bearer)):
+    # Double-book guard: capacity = active bay count (default 2 if none configured)
+    bay_count = max(await db.bays.count_documents({"active": True}), 2)
+    same_slot = await db.bookings.count_documents({
+        "preferred_date": data.preferred_date,
+        "preferred_time": data.preferred_time,
+        "status": {"$nin": ["CANCELLED", "REJECTED"]},
+    })
+    if same_slot >= bay_count:
+        raise HTTPException(409, f"That slot is fully booked ({same_slot}/{bay_count}). Please choose another time.")
     customer_id = data.customer_id
     vehicle_id = data.vehicle_id
     # Handle guest booking
@@ -1199,6 +1208,72 @@ async def accounting_summary(user=Depends(require_roles("OWNER", "ADMIN"))):
 @api.get("/accounting/journal")
 async def list_journal(user=Depends(require_roles("OWNER", "ADMIN"))):
     return await db.journal.find({}, {"_id": 0}).sort("date", -1).to_list(1000)
+
+
+class InsuranceIn(BaseModel):
+    insurer: str
+    claim_number: str
+    assessor_name: Optional[str] = ""
+    assessor_phone: Optional[str] = ""
+    assessor_email: Optional[str] = ""
+    excess: float = 0.0
+    date_of_loss: Optional[str] = ""
+    notes: Optional[str] = ""
+
+
+@api.patch("/jobs/{jid}/insurance")
+async def set_insurance(jid: str, data: InsuranceIn, user=Depends(require_roles(*STAFF_ROLES))):
+    await db.jobs.update_one({"id": jid}, {"$set": {"insurance": data.model_dump(), "private_or_insurance": "INSURANCE"}})
+    return {"ok": True}
+
+
+@api.get("/jobs/{jid}/insurance-pack")
+async def insurance_pack(jid: str, user=Depends(require_roles(*STAFF_ROLES))):
+    j = await db.jobs.find_one({"id": jid}, {"_id": 0})
+    if not j:
+        raise HTTPException(404, "Not found")
+    j["customer"] = await db.customers.find_one({"id": j["customer_id"]}, {"_id": 0})
+    j["vehicle"] = await db.vehicles.find_one({"id": j["vehicle_id"]}, {"_id": 0})
+    j["quotes"] = await db.quotes.find({"job_id": jid}, {"_id": 0}).to_list(20)
+    j["photos_full"] = await db.job_photos.find({"job_id": jid}, {"_id": 0, "image_base64": 0}).to_list(100)
+    return j
+
+
+class PhotoIn(BaseModel):
+    image_base64: str
+    caption: Optional[str] = ""
+
+
+@api.post("/jobs/{jid}/photos")
+async def upload_job_photo(jid: str, data: PhotoIn, user=Depends(current_user)):
+    j = await db.jobs.find_one({"id": jid})
+    if not j:
+        raise HTTPException(404, "Job not found")
+    # Only assigned tech/staff or customer-of-job
+    if user["role"] == "CUSTOMER":
+        cust = await db.customers.find_one({"user_id": user["id"]})
+        if not cust or cust["id"] != j["customer_id"]:
+            raise HTTPException(403, "Forbidden")
+    doc = {
+        "id": uid(), "job_id": jid, "image_base64": data.image_base64,
+        "caption": data.caption, "uploaded_by": user["id"], "uploaded_by_role": user["role"],
+        "created_at": now_iso(),
+    }
+    await db.job_photos.insert_one(doc)
+    return {"id": doc["id"], "created_at": doc["created_at"]}
+
+
+@api.get("/jobs/{jid}/photos")
+async def list_job_photos(jid: str, user=Depends(current_user)):
+    j = await db.jobs.find_one({"id": jid})
+    if not j:
+        raise HTTPException(404, "Job not found")
+    if user["role"] == "CUSTOMER":
+        cust = await db.customers.find_one({"user_id": user["id"]})
+        if not cust or cust["id"] != j["customer_id"]:
+            raise HTTPException(403, "Forbidden")
+    rows = await db.job_photos.find({"job_id": jid}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return rows
 
 
 # ============================================================
