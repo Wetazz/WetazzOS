@@ -16,6 +16,7 @@ import Login from "@/pages/public/Login";
 import Signup from "@/pages/public/Signup";
 import PaymentSuccess from "@/pages/public/PaymentSuccess";
 import PaymentCancel from "@/pages/public/PaymentCancel";
+import AssessorView from "@/pages/public/AssessorView";
 
 import PortalLayout from "@/pages/portal/PortalLayout";
 import PortalHome from "@/pages/portal/PortalHome";
@@ -72,8 +73,7 @@ export default function App() {
             <Route path="/payment/success" element={<PaymentSuccess />} />
             <Route path="/payment/cancel" element={<PaymentCancel />} />
           </Route>
-
-          {/* Customer portal */}
+          <Route path="/assessor/:token" element={<AssessorView />} />
           <Route path="/portal" element={<Protected roles={["CUSTOMER"]}><PortalLayout /></Protected>}>
             <Route index element={<PortalHome />} />
             <Route path="vehicles" element={<PortalVehicles />} />

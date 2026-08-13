@@ -144,6 +144,7 @@ class BookingIn(BaseModel):
     preferred_date: str  # ISO date
     preferred_time: str  # HH:MM
     contact_method: Optional[str] = "SMS"
+    bay_kind: Optional[str] = "GENERAL"  # PAINT | PANEL | MECHANICAL | GENERAL
     # Guest booking fields (used only when no logged in customer)
     guest_first_name: Optional[str] = ""
     guest_last_name: Optional[str] = ""
@@ -393,15 +394,17 @@ async def global_search(q: str, user=Depends(require_roles(*STAFF_ROLES))):
 # ============================================================
 @api.post("/bookings")
 async def create_booking(data: BookingIn, cred: Optional[HTTPAuthorizationCredentials] = Depends(bearer)):
-    # Double-book guard: capacity = active bay count (default 2 if none configured)
-    bay_count = max(await db.bays.count_documents({"active": True}), 2)
+    # Double-book guard: capacity = active bays for that kind (fallback 1)
+    bay_kind = data.bay_kind or "GENERAL"
+    bay_count = max(await db.bays.count_documents({"active": True, "kind": bay_kind}), 1)
     same_slot = await db.bookings.count_documents({
         "preferred_date": data.preferred_date,
         "preferred_time": data.preferred_time,
+        "bay_kind": bay_kind,
         "status": {"$nin": ["CANCELLED", "REJECTED"]},
     })
     if same_slot >= bay_count:
-        raise HTTPException(409, f"That slot is fully booked ({same_slot}/{bay_count}). Please choose another time.")
+        raise HTTPException(409, f"That {bay_kind.lower()} slot is fully booked. Please choose another time.")
     customer_id = data.customer_id
     vehicle_id = data.vehicle_id
     # Handle guest booking
@@ -437,6 +440,7 @@ async def create_booking(data: BookingIn, cred: Optional[HTTPAuthorizationCreden
         "service_type": data.service_type, "booking_type": data.booking_type,
         "description": data.description, "preferred_date": data.preferred_date,
         "preferred_time": data.preferred_time, "contact_method": data.contact_method,
+        "bay_kind": data.bay_kind or "GENERAL",
         "photos": data.photos, "status": "REQUESTED", "created_at": now_iso(),
     }
     await db.bookings.insert_one(doc)
@@ -1242,6 +1246,7 @@ async def insurance_pack(jid: str, user=Depends(require_roles(*STAFF_ROLES))):
 class PhotoIn(BaseModel):
     image_base64: str
     caption: Optional[str] = ""
+    stage: Optional[str] = "DURING"  # BEFORE | DURING | AFTER
 
 
 @api.post("/jobs/{jid}/photos")
@@ -1256,7 +1261,8 @@ async def upload_job_photo(jid: str, data: PhotoIn, user=Depends(current_user)):
             raise HTTPException(403, "Forbidden")
     doc = {
         "id": uid(), "job_id": jid, "image_base64": data.image_base64,
-        "caption": data.caption, "uploaded_by": user["id"], "uploaded_by_role": user["role"],
+        "caption": data.caption, "stage": (data.stage or "DURING").upper(),
+        "uploaded_by": user["id"], "uploaded_by_role": user["role"],
         "created_at": now_iso(),
     }
     await db.job_photos.insert_one(doc)
@@ -1274,6 +1280,38 @@ async def list_job_photos(jid: str, user=Depends(current_user)):
             raise HTTPException(403, "Forbidden")
     rows = await db.job_photos.find({"job_id": jid}, {"_id": 0}).sort("created_at", -1).to_list(200)
     return rows
+
+
+# ============================================================
+# ASSESSOR PUBLIC LINK (signed, no auth)
+# ============================================================
+@api.post("/jobs/{jid}/assessor-link")
+async def create_assessor_link(jid: str, user=Depends(require_roles(*STAFF_ROLES))):
+    j = await db.jobs.find_one({"id": jid})
+    if not j:
+        raise HTTPException(404, "Not found")
+    payload = {"jid": jid, "exp": datetime.now(timezone.utc) + timedelta(days=14), "scope": "assessor"}
+    token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+    return {"url": f"/assessor/{token}", "expires_in_days": 14}
+
+
+@api.get("/assessor/{token}")
+async def assessor_view(token: str):
+    try:
+        data = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+    except jwt.PyJWTError:
+        raise HTTPException(401, "Invalid or expired link")
+    if data.get("scope") != "assessor":
+        raise HTTPException(403, "Wrong scope")
+    jid = data["jid"]
+    j = await db.jobs.find_one({"id": jid}, {"_id": 0})
+    if not j:
+        raise HTTPException(404, "Not found")
+    j["customer"] = await db.customers.find_one({"id": j["customer_id"]}, {"_id": 0, "first_name": 1, "last_name": 1, "phone": 1, "email": 1})
+    j["vehicle"] = await db.vehicles.find_one({"id": j["vehicle_id"]}, {"_id": 0})
+    j["quotes"] = await db.quotes.find({"job_id": jid}, {"_id": 0}).to_list(20)
+    j["photos"] = await db.job_photos.find({"job_id": jid}, {"_id": 0}).sort("created_at", 1).to_list(200)
+    return j
 
 
 # ============================================================

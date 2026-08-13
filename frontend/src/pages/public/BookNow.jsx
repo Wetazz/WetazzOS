@@ -9,7 +9,7 @@ export default function BookNow() {
   const user = getUser();
   const nav = useNavigate();
   const [f, setF] = useState({
-    booking_type: "Quote/Inspection", service_type: "MECHANICAL",
+    booking_type: "Quote/Inspection", service_type: "MECHANICAL", bay_kind: "MECHANICAL",
     description: "", preferred_date: "", preferred_time: "09:00",
     contact_method: "EMAIL",
     guest_first_name: "", guest_last_name: "", guest_email: "", guest_phone: "",
@@ -34,6 +34,7 @@ export default function BookNow() {
         <div className="grid md:grid-cols-2 gap-4">
           <Field label="Booking type"><select data-testid="booking-type" value={f.booking_type} onChange={e=>set("booking_type",e.target.value)} className="wz-input">{BOOKING_TYPES.map(t=><option key={t} value={t}>{t}</option>)}</select></Field>
           <Field label="Service category"><select data-testid="booking-service" value={f.service_type} onChange={e=>set("service_type",e.target.value)} className="wz-input"><option>PAINT</option><option>PANEL</option><option>MECHANICAL</option></select></Field>
+          <Field label="Bay type"><select data-testid="booking-bay-kind" value={f.bay_kind} onChange={e=>set("bay_kind",e.target.value)} className="wz-input"><option>PAINT</option><option>PANEL</option><option>MECHANICAL</option><option>GENERAL</option></select></Field>
           <Field label="Preferred date"><input data-testid="booking-date" required type="date" value={f.preferred_date} onChange={e=>set("preferred_date",e.target.value)} className="wz-input"/></Field>
           <Field label="Preferred time"><input data-testid="booking-time" required type="time" value={f.preferred_time} onChange={e=>set("preferred_time",e.target.value)} className="wz-input"/></Field>
         </div>

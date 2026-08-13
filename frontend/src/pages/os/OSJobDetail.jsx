@@ -8,7 +8,9 @@ export default function OSJobDetail() {
   const { jid } = useParams();
   const [job, setJob] = useState(null);
   const [photos, setPhotos] = useState([]);
+  const [stage, setStage] = useState("DURING");
   const [showIns, setShowIns] = useState(false);
+  const [assessorUrl, setAssessorUrl] = useState("");
   const [ins, setIns] = useState({ insurer:"", claim_number:"", assessor_name:"", assessor_phone:"", assessor_email:"", excess:0, date_of_loss:"", notes:"" });
   const fileRef = useRef(null);
 
@@ -30,7 +32,7 @@ export default function OSJobDetail() {
     const r = new FileReader();
     r.onload = async () => {
       const b64 = r.result.split(",")[1];
-      try { await api.post(`/jobs/${jid}/photos`, { image_base64: b64 }); toast.success("Photo uploaded"); load(); }
+      try { await api.post(`/jobs/${jid}/photos`, { image_base64: b64, stage }); toast.success(`${stage} photo uploaded`); load(); }
       catch { toast.error("Upload failed"); }
     };
     r.readAsDataURL(file);
@@ -69,17 +71,24 @@ export default function OSJobDetail() {
       <div className="mt-6 border border-white/10 p-6">
         <div className="flex items-center justify-between mb-3">
           <div className="text-xs uppercase tracking-widest text-zinc-400">Job photos</div>
-          <button data-testid="job-photo-btn" onClick={()=>fileRef.current?.click()} className="flex items-center gap-2 px-3 py-1.5 border border-[#B5FF2E] text-[#B5FF2E] hover:bg-[#B5FF2E] hover:text-black uppercase text-xs"><Camera size={14}/> Snap / Upload</button>
+          <div className="flex items-center gap-2">
+            <select value={stage} onChange={e=>setStage(e.target.value)} data-testid="photo-stage" className="bg-[#0f0f10] border border-white/10 px-2 py-1 text-xs"><option>BEFORE</option><option>DURING</option><option>AFTER</option></select>
+            <button data-testid="job-photo-btn" onClick={()=>fileRef.current?.click()} className="flex items-center gap-2 px-3 py-1.5 border border-[#B5FF2E] text-[#B5FF2E] hover:bg-[#B5FF2E] hover:text-black uppercase text-xs"><Camera size={14}/> Snap / Upload</button>
+          </div>
           <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFile} data-testid="job-photo-input"/>
         </div>
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
-          {photos.map(p => (
-            <div key={p.id} className="border border-white/10 aspect-square overflow-hidden" data-testid={`job-photo-${p.id}`}>
-              <img src={`data:image/jpeg;base64,${p.image_base64}`} className="w-full h-full object-cover" alt=""/>
+        {["BEFORE","DURING","AFTER"].map(s => {
+          const bucket = photos.filter(p => (p.stage||"DURING") === s);
+          return (
+            <div key={s} className="mt-3">
+              <div className="text-[10px] uppercase tracking-widest text-[#FF2E93] mb-1">// {s} · {bucket.length}</div>
+              <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+                {bucket.map(p => <div key={p.id} className="border border-white/10 aspect-square overflow-hidden" data-testid={`job-photo-${p.id}`}><img src={`data:image/jpeg;base64,${p.image_base64}`} className="w-full h-full object-cover" alt=""/></div>)}
+                {!bucket.length && <div className="text-zinc-600 text-xs col-span-6">No {s.toLowerCase()} photos yet.</div>}
+              </div>
             </div>
-          ))}
-          {!photos.length && <div className="text-zinc-500 text-sm col-span-6">No photos yet. Snap one from your phone.</div>}
-        </div>
+          );
+        })}
       </div>
 
       <div className="mt-6 border border-white/10 p-6">
@@ -88,6 +97,7 @@ export default function OSJobDetail() {
           <div className="flex gap-2">
             <button data-testid="ins-edit-btn" onClick={()=>setShowIns(!showIns)} className="px-3 py-1.5 border border-white/20 uppercase text-xs">{job.insurance ? "Edit" : "Add insurance"}</button>
             {job.insurance && <button data-testid="ins-pack-btn" onClick={printPack} className="flex items-center gap-2 px-3 py-1.5 bg-[#FF2E93] hover:bg-[#FF5CB5] text-black uppercase text-xs"><FileText size={14}/> Print pack</button>}
+            {job.insurance && <button data-testid="assessor-link-btn" onClick={async()=>{const r=await api.post(`/jobs/${jid}/assessor-link`);const u=window.location.origin+r.data.url;setAssessorUrl(u);navigator.clipboard?.writeText(u);toast.success("Link copied to clipboard");}} className="px-3 py-1.5 border border-[#B5FF2E] text-[#B5FF2E] hover:bg-[#B5FF2E] hover:text-black uppercase text-xs">Assessor link</button>}
           </div>
         </div>
         {job.insurance && !showIns && (
@@ -113,6 +123,7 @@ export default function OSJobDetail() {
             <button data-testid="ins-save-btn" onClick={saveIns} className="bg-[#B5FF2E] hover:bg-[#C8FF5A] text-black uppercase text-sm font-bold md:col-span-3">Save insurance</button>
           </div>
         )}
+        {assessorUrl && <div className="mt-3 text-xs font-mono text-[#B5FF2E] break-all border border-[#B5FF2E]/30 p-2" data-testid="assessor-url">{assessorUrl}</div>}
       </div>
 
       <div className="mt-6 border border-white/10 p-6">
