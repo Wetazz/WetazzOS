@@ -23,7 +23,7 @@ export default function OSCustomers() {
         <input required data-testid="cust-last" placeholder="Last" value={f.last_name} onChange={e=>setF({...f,last_name:e.target.value})} className="wz-i"/>
         <input data-testid="cust-email" placeholder="Email" value={f.email} onChange={e=>setF({...f,email:e.target.value})} className="wz-i"/>
         <input data-testid="cust-phone" placeholder="Phone" value={f.phone} onChange={e=>setF({...f,phone:e.target.value})} className="wz-i"/>
-        <button data-testid="cust-add" className="bg-[#FF3B30] hover:bg-[#FF5B52] uppercase text-sm font-bold">Add</button>
+        <button data-testid="cust-add" className="bg-[#B5FF2E] hover:bg-[#C8FF5A] uppercase text-sm font-bold">Add</button>
       </form>
       <div className="border border-white/10">
         <table className="w-full text-sm">
@@ -34,13 +34,13 @@ export default function OSCustomers() {
                 <td className="px-4 py-2">{c.first_name} {c.last_name}</td>
                 <td className="px-4 py-2 font-mono text-xs">{c.email}</td>
                 <td className="px-4 py-2 font-mono text-xs">{c.phone}</td>
-                <td className="px-4 py-2 text-xs uppercase text-[#FF3B30]">{c.status}</td>
+                <td className="px-4 py-2 text-xs uppercase text-[#B5FF2E]">{c.status}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <style>{`.wz-i{background:#0f0f10;border:1px solid #27272a;padding:.55rem .75rem;color:white;outline:none;font-size:.85rem}.wz-i:focus{border-color:#FF3B30}`}</style>
+      <style>{`.wz-i{background:#0f0f10;border:1px solid #27272a;padding:.55rem .75rem;color:white;outline:none;font-size:.85rem}.wz-i:focus{border-color:#B5FF2E}`}</style>
     </div>
   );
 }

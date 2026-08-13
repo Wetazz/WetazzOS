@@ -39,21 +39,21 @@ export default function PortalVehicles() {
         <input data-testid="veh-year" placeholder="Year" value={f.year} onChange={e=>setF({...f,year:e.target.value})} className="wz-i"/>
         <input data-testid="veh-rego" placeholder="Rego" value={f.registration} onChange={e=>setF({...f,registration:e.target.value})} className="wz-i"/>
         <input data-testid="veh-colour" placeholder="Colour" value={f.colour} onChange={e=>setF({...f,colour:e.target.value})} className="wz-i"/>
-        <button data-testid="veh-add-btn" className="bg-[#FF3B30] hover:bg-[#FF5B52] uppercase text-sm font-bold">Add</button>
+        <button data-testid="veh-add-btn" className="bg-[#B5FF2E] hover:bg-[#C8FF5A] uppercase text-sm font-bold">Add</button>
       </form>
       <div className="grid md:grid-cols-2 gap-4">
         {rows.map(v => (
           <div key={v.id} className="border border-white/10 p-6" data-testid={`vehicle-${v.id}`}>
             <div className="flex items-baseline justify-between">
               <div className="font-display text-2xl">{v.year} {v.make} {v.model}</div>
-              <div className="font-mono text-xs text-[#FF3B30]">{v.registration || "—"}</div>
+              <div className="font-mono text-xs text-[#B5FF2E]">{v.registration || "—"}</div>
             </div>
             <div className="text-xs text-zinc-500 font-mono mt-1">VIN {v.vin || "—"} · {v.colour || "—"}</div>
           </div>
         ))}
         {!rows.length && <div className="text-zinc-500">No vehicles yet.</div>}
       </div>
-      <style>{`.wz-i{background:#0f0f10;border:1px solid #27272a;padding:.55rem .7rem;color:white;outline:none;font-size:.85rem}.wz-i:focus{border-color:#FF3B30}`}</style>
+      <style>{`.wz-i{background:#0f0f10;border:1px solid #27272a;padding:.55rem .7rem;color:white;outline:none;font-size:.85rem}.wz-i:focus{border-color:#B5FF2E}`}</style>
     </div>
   );
 }

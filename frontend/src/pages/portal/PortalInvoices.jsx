@@ -18,10 +18,10 @@ export default function PortalInvoices() {
           <div key={i.id} className="border border-white/10 p-5" data-testid={`invoice-row-${i.id}`}>
             <div className="flex items-baseline justify-between">
               <div className="font-display text-xl">{i.invoice_number}</div>
-              <div className="text-xs uppercase tracking-widest text-[#FF3B30]">{i.status}</div>
+              <div className="text-xs uppercase tracking-widest text-[#B5FF2E]">{i.status}</div>
             </div>
             <div className="font-mono text-lg mt-1">Total A${i.total?.toFixed(2)} · Balance A${i.balance?.toFixed(2)}</div>
-            {i.balance > 0 && <button data-testid={`invoice-pay-${i.id}`} onClick={()=>pay(i)} className="mt-3 px-4 py-2 bg-[#FF3B30] hover:bg-[#FF5B52] uppercase text-sm font-bold">Pay balance</button>}
+            {i.balance > 0 && <button data-testid={`invoice-pay-${i.id}`} onClick={()=>pay(i)} className="mt-3 px-4 py-2 bg-[#B5FF2E] hover:bg-[#C8FF5A] uppercase text-sm font-bold">Pay balance</button>}
           </div>
         ))}
         {!rows.length && <div className="text-zinc-500">No invoices yet.</div>}

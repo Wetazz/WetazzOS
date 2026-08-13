@@ -28,7 +28,7 @@ export default function BookNow() {
 
   return (
     <div className="max-w-3xl mx-auto px-6 py-16">
-      <div className="text-[#FF3B30] font-mono text-xs tracking-[0.4em] mb-2">// SCHEDULE</div>
+      <div className="text-[#B5FF2E] font-mono text-xs tracking-[0.4em] mb-2">// SCHEDULE</div>
       <h1 className="font-display text-5xl mb-8">Book Now</h1>
       <form onSubmit={submit} className="space-y-6 border border-white/10 p-8" data-testid="booking-form">
         <div className="grid md:grid-cols-2 gap-4">
@@ -57,9 +57,9 @@ export default function BookNow() {
             </div>
           </>
         )}
-        <button data-testid="booking-submit" className="w-full bg-[#FF3B30] hover:bg-[#FF5B52] py-3 font-bold uppercase tracking-widest">Submit booking</button>
+        <button data-testid="booking-submit" className="w-full bg-[#B5FF2E] hover:bg-[#C8FF5A] py-3 font-bold uppercase tracking-widest">Submit booking</button>
       </form>
-      <style>{`.wz-input{width:100%;background:#0f0f10;border:1px solid #27272a;padding:.65rem .85rem;color:white;font-family:inherit;outline:none}.wz-input:focus{border-color:#FF3B30}`}</style>
+      <style>{`.wz-input{width:100%;background:#0f0f10;border:1px solid #27272a;padding:.65rem .85rem;color:white;font-family:inherit;outline:none}.wz-input:focus{border-color:#B5FF2E}`}</style>
     </div>
   );
 }

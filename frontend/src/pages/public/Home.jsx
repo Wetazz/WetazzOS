@@ -15,14 +15,14 @@ export default function Home() {
         <div className="wz-grid-bg absolute inset-0 opacity-40" />
         <div className="relative max-w-7xl mx-auto px-6 pb-16 pt-24 grid md:grid-cols-12 gap-8 w-full">
           <div className="md:col-span-8">
-            <div className="text-[#FF3B30] font-mono text-xs tracking-[0.4em] mb-4">// WETAZZ.OS / v1.0</div>
+            <div className="text-[#B5FF2E] font-mono text-xs tracking-[0.4em] mb-4">// WETAZZ.OS / v1.0</div>
             <h1 className="font-display text-5xl sm:text-6xl lg:text-7xl leading-[0.9] mb-6" data-testid="hero-title">
-              Precision <span className="text-[#FF3B30]">paint</span>,<br/>panel & <span className="text-[#FF3B30]">mechanical</span><br/>done properly.
+              <span className="text-[#B5FF2E]">Paint.</span><br/><span className="text-[#FF2E93]">Panel.</span><br/><span className="text-white">Mechanical.</span>
             </h1>
-            <p className="text-zinc-300 max-w-xl mb-8 text-lg">Melbourne’s workshop for smash repairs, panel work, resprays and full mechanical service — powered by a workshop OS your car never sees, but always feels.</p>
+            <p className="text-zinc-300 max-w-xl mb-8 text-lg">89 Maxwell St, Wellington NSW. Log-book servicing, brakes, suspension, tyres, batteries, 4WD fit-outs, panel repairs, paint work and spare parts — all under one roof.</p>
             <div className="flex flex-wrap gap-3">
-              <Link to="/book" data-testid="hero-book-btn" className="inline-flex items-center gap-2 bg-[#FF3B30] hover:bg-[#FF5B52] px-6 py-3 font-bold uppercase tracking-wide text-sm">Book Now <ArrowRight size={16} /></Link>
-              <Link to="/quote" data-testid="hero-quote-btn" className="inline-flex items-center gap-2 border border-white/30 hover:bg-white/10 px-6 py-3 font-bold uppercase tracking-wide text-sm">Get an AI Quote</Link>
+              <Link to="/book" data-testid="hero-book-btn" className="inline-flex items-center gap-2 bg-[#B5FF2E] hover:bg-[#C8FF5A] px-6 py-3 font-bold uppercase tracking-wide text-sm">Book Now <ArrowRight size={16} /></Link>
+              <Link to="/quote" data-testid="hero-quote-btn" className="inline-flex items-center gap-2 border-2 border-[#FF2E93] text-[#FF2E93] hover:bg-[#FF2E93] hover:text-black px-6 py-3 font-bold uppercase tracking-wide text-sm transition-colors">Get an AI Quote</Link>
             </div>
           </div>
           <div className="md:col-span-4 hidden md:flex flex-col justify-end gap-3">
@@ -43,8 +43,8 @@ export default function Home() {
           {icon:<Wrench />, title:"Panel", body:"Dent repairs, panel replacement, bumper work, smash repairs, damage assessment."},
           {icon:<ShieldCheck />, title:"Mechanical", body:"Servicing, diagnostics, brakes, suspension, cooling, engine repairs, inspections."},
         ].map(s => (
-          <div key={s.title} className="border border-white/10 p-8 hover:border-[#FF3B30] transition-colors" data-testid={`pillar-${s.title.toLowerCase()}`}>
-            <div className="text-[#FF3B30] mb-4">{s.icon}</div>
+          <div key={s.title} className="border border-white/10 p-8 hover:border-[#B5FF2E] transition-colors" data-testid={`pillar-${s.title.toLowerCase()}`}>
+            <div className="text-[#B5FF2E] mb-4">{s.icon}</div>
             <div className="font-display text-3xl mb-2">{s.title}</div>
             <div className="text-zinc-400 text-sm">{s.body}</div>
           </div>
@@ -55,15 +55,15 @@ export default function Home() {
       <section className="relative border-t border-b border-white/10">
         <div className="max-w-7xl mx-auto px-6 py-24 grid md:grid-cols-12 gap-12 items-center">
           <div className="md:col-span-6">
-            <div className="text-[#FF3B30] font-mono text-xs tracking-[0.4em] mb-3">// WETAZZ AI</div>
+            <div className="text-[#B5FF2E] font-mono text-xs tracking-[0.4em] mb-3">// WETAZZ AI</div>
             <h2 className="font-display text-4xl md:text-5xl mb-4">Upload a photo.<br/>Get a preliminary estimate.</h2>
             <p className="text-zinc-400 mb-6">Snap the damage, drop the photo in, and our AI returns a preliminary range for parts, labour and materials in seconds. Physical inspection confirms the final quote.</p>
-            <Link to="/quote" data-testid="ai-promo-btn" className="inline-flex items-center gap-2 bg-[#FF3B30] hover:bg-[#FF5B52] px-6 py-3 uppercase font-bold text-sm">Try the AI estimator <Sparkles size={16} /></Link>
+            <Link to="/quote" data-testid="ai-promo-btn" className="inline-flex items-center gap-2 bg-[#B5FF2E] hover:bg-[#C8FF5A] px-6 py-3 uppercase font-bold text-sm">Try the AI estimator <Sparkles size={16} /></Link>
           </div>
           <div className="md:col-span-6 relative wz-scan border border-white/10">
             <img src={GAL1} alt="Car" className="w-full h-80 object-cover opacity-90" />
             <div className="absolute inset-0 wz-grid-bg opacity-40" />
-            <div className="absolute bottom-3 left-3 font-mono text-xs text-[#FF3B30]">SCANNING · CONFIDENCE 87%</div>
+            <div className="absolute bottom-3 left-3 font-mono text-xs text-[#B5FF2E]">SCANNING · CONFIDENCE 87%</div>
           </div>
         </div>
       </section>
@@ -72,7 +72,7 @@ export default function Home() {
       <section className="max-w-7xl mx-auto px-6 py-24">
         <div className="flex items-end justify-between mb-8">
           <div>
-            <div className="text-[#FF3B30] font-mono text-xs tracking-[0.4em] mb-2">// RECENT WORK</div>
+            <div className="text-[#B5FF2E] font-mono text-xs tracking-[0.4em] mb-2">// RECENT WORK</div>
             <h2 className="font-display text-4xl">The workshop floor</h2>
           </div>
           <Link to="/services" className="text-sm uppercase tracking-widest text-zinc-400 hover:text-white">See services →</Link>
@@ -85,14 +85,14 @@ export default function Home() {
 
       {/* CTA */}
       <section className="max-w-7xl mx-auto px-6 pb-24">
-        <div className="border border-[#FF3B30]/30 p-12 bg-[#FF3B30]/5">
+        <div className="border border-[#B5FF2E]/30 p-12 bg-[#B5FF2E]/5">
           <div className="grid md:grid-cols-12 gap-8 items-center">
             <div className="md:col-span-8">
               <h2 className="font-display text-4xl mb-2">Ready to book?</h2>
               <p className="text-zinc-300">Pick a time, tell us what happened, and we’ll take it from there.</p>
             </div>
             <div className="md:col-span-4 flex md:justify-end">
-              <Link to="/book" data-testid="footer-cta-book" className="inline-flex items-center gap-2 bg-[#FF3B30] hover:bg-[#FF5B52] px-8 py-4 uppercase font-bold text-sm">Book now <ArrowRight size={16} /></Link>
+              <Link to="/book" data-testid="footer-cta-book" className="inline-flex items-center gap-2 bg-[#B5FF2E] hover:bg-[#C8FF5A] px-8 py-4 uppercase font-bold text-sm">Book now <ArrowRight size={16} /></Link>
             </div>
           </div>
         </div>

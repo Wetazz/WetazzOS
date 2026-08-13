@@ -39,7 +39,7 @@ export default function GetQuote() {
   const est = result?.estimate;
   return (
     <div className="max-w-6xl mx-auto px-6 py-16">
-      <div className="text-[#FF3B30] font-mono text-xs tracking-[0.4em] mb-2">// WETAZZ AI</div>
+      <div className="text-[#B5FF2E] font-mono text-xs tracking-[0.4em] mb-2">// WETAZZ AI</div>
       <h1 className="font-display text-5xl mb-2">Preliminary AI Estimate</h1>
       <p className="text-zinc-400 mb-8 max-w-2xl">Upload a photo of the damage. Our AI will return a preliminary range for parts, labour and materials. Final pricing requires a physical inspection.</p>
       <div className="grid lg:grid-cols-2 gap-6">
@@ -50,7 +50,7 @@ export default function GetQuote() {
           </div>
           <textarea data-testid="ai-desc" className="wz-input2" rows={3} placeholder="Describe what happened..." value={desc} onChange={e=>setDesc(e.target.value)} />
           <label className="block cursor-pointer">
-            <div className="border border-dashed border-white/20 aspect-video flex items-center justify-center relative overflow-hidden hover:border-[#FF3B30] transition-colors">
+            <div className="border border-dashed border-white/20 aspect-video flex items-center justify-center relative overflow-hidden hover:border-[#B5FF2E] transition-colors">
               {preview ? (
                 <div className="relative w-full h-full wz-scan">
                   <img src={preview} className="w-full h-full object-cover" alt="damage" />
@@ -66,12 +66,12 @@ export default function GetQuote() {
             <input data-testid="ai-file" type="file" accept="image/*" className="hidden" onChange={onFile} />
           </label>
           <button data-testid="ai-analyse-btn" onClick={analyse} disabled={loading || !b64}
-            className="w-full bg-[#FF3B30] hover:bg-[#FF5B52] py-3 font-bold uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50">
+            className="w-full bg-[#B5FF2E] hover:bg-[#C8FF5A] py-3 font-bold uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50">
             {loading ? <><Loader2 className="animate-spin" size={16}/> Analysing...</> : <><Sparkles size={16}/> Analyse damage</>}
           </button>
         </div>
         <div className="border border-white/10 p-6" data-testid="ai-quote-result">
-          <div className="text-xs font-mono text-[#FF3B30] tracking-widest mb-3">// AI RESPONSE</div>
+          <div className="text-xs font-mono text-[#B5FF2E] tracking-widest mb-3">// AI RESPONSE</div>
           {!result && <div className="text-zinc-500 text-sm">Upload a photo and hit Analyse. The estimate will appear here.</div>}
           {result && (
             <div className="space-y-4">
@@ -89,7 +89,7 @@ export default function GetQuote() {
                   </div>
                   <div className="border-t border-white/10 pt-3">
                     <div className="text-xs uppercase tracking-widest text-zinc-400">Estimated range</div>
-                    <div className="font-display text-4xl text-[#FF3B30]">A${est.price_low_aud} – A${est.price_high_aud}</div>
+                    <div className="font-display text-4xl text-[#B5FF2E]">A${est.price_low_aud} – A${est.price_high_aud}</div>
                   </div>
                   {est.notes && <div className="text-zinc-400 text-sm">{est.notes}</div>}
                 </>
@@ -100,7 +100,7 @@ export default function GetQuote() {
           )}
         </div>
       </div>
-      <style>{`.wz-input2{width:100%;background:#0f0f10;border:1px solid #27272a;padding:.65rem .85rem;color:white;outline:none;font-family:inherit}.wz-input2:focus{border-color:#FF3B30}`}</style>
+      <style>{`.wz-input2{width:100%;background:#0f0f10;border:1px solid #27272a;padding:.65rem .85rem;color:white;outline:none;font-family:inherit}.wz-input2:focus{border-color:#B5FF2E}`}</style>
     </div>
   );
 }

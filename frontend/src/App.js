@@ -38,6 +38,10 @@ import OSInbox from "@/pages/os/OSInbox";
 import OSReviews from "@/pages/os/OSReviews";
 import OSStaff from "@/pages/os/OSStaff";
 import OSAssistant from "@/pages/os/OSAssistant";
+import OSParts from "@/pages/os/OSParts";
+import OSSuppliers from "@/pages/os/OSSuppliers";
+import OSCalendar from "@/pages/os/OSCalendar";
+import OSAccounting from "@/pages/os/OSAccounting";
 
 function Protected({ roles, children }) {
   const user = getUser();
@@ -92,6 +96,10 @@ export default function App() {
             <Route path="reviews" element={<OSReviews />} />
             <Route path="staff" element={<OSStaff />} />
             <Route path="assistant" element={<OSAssistant />} />
+            <Route path="parts" element={<OSParts />} />
+            <Route path="suppliers" element={<OSSuppliers />} />
+            <Route path="calendar" element={<OSCalendar />} />
+            <Route path="accounting" element={<OSAccounting />} />
           </Route>
         </Routes>
       </BrowserRouter>

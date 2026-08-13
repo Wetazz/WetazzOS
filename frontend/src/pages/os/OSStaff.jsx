@@ -22,15 +22,15 @@ export default function OSStaff() {
         <select value={f.role} onChange={e=>setF({...f,role:e.target.value})} className="wz-i"><option>ADMIN</option><option>SERVICE_ADVISOR</option><option>TECHNICIAN</option><option>STAFF</option></select>
         <input type="number" placeholder="Hourly cost" value={f.hourly_cost} onChange={e=>setF({...f,hourly_cost:parseFloat(e.target.value)||0})} className="wz-i"/>
         <input type="number" placeholder="Selling rate" value={f.selling_rate} onChange={e=>setF({...f,selling_rate:parseFloat(e.target.value)||0})} className="wz-i"/>
-        <button data-testid="staff-add-btn" className="bg-[#FF3B30] uppercase text-sm font-bold">Add staff</button>
+        <button data-testid="staff-add-btn" className="bg-[#B5FF2E] text-black uppercase text-sm font-bold">Add staff</button>
       </form>
       <div className="border border-white/10">
         <table className="w-full text-sm">
           <thead className="bg-white/5"><tr><th className="text-left px-4 py-2 uppercase text-xs text-zinc-400 tracking-widest">Name</th><th className="text-left px-4 py-2 uppercase text-xs text-zinc-400 tracking-widest">Email</th><th className="text-left px-4 py-2 uppercase text-xs text-zinc-400 tracking-widest">Role</th><th className="text-left px-4 py-2 uppercase text-xs text-zinc-400 tracking-widest">Rate</th></tr></thead>
-          <tbody>{rows.map(s=>(<tr key={s.id} className="border-t border-white/10"><td className="px-4 py-2">{s.first_name} {s.last_name}</td><td className="px-4 py-2 font-mono text-xs">{s.email}</td><td className="px-4 py-2 text-xs uppercase text-[#FF3B30]">{s.role}</td><td className="px-4 py-2 font-mono">A${s.selling_rate || 135}/h</td></tr>))}</tbody>
+          <tbody>{rows.map(s=>(<tr key={s.id} className="border-t border-white/10"><td className="px-4 py-2">{s.first_name} {s.last_name}</td><td className="px-4 py-2 font-mono text-xs">{s.email}</td><td className="px-4 py-2 text-xs uppercase text-[#B5FF2E]">{s.role}</td><td className="px-4 py-2 font-mono">A${s.selling_rate || 135}/h</td></tr>))}</tbody>
         </table>
       </div>
-      <style>{`.wz-i{background:#0f0f10;border:1px solid #27272a;padding:.5rem .7rem;color:white;outline:none;font-size:.85rem}.wz-i:focus{border-color:#FF3B30}`}</style>
+      <style>{`.wz-i{background:#0f0f10;border:1px solid #27272a;padding:.5rem .7rem;color:white;outline:none;font-size:.85rem}.wz-i:focus{border-color:#B5FF2E}`}</style>
     </div>
   );
 }

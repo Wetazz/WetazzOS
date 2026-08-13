@@ -35,7 +35,7 @@ export default function OSQuotes() {
     <div className="p-8">
       <div className="flex items-baseline justify-between mb-6">
         <h1 className="font-display text-4xl">Quotes</h1>
-        <button data-testid="new-quote-btn" onClick={()=>setShow(true)} className="px-4 py-2 bg-[#FF3B30] hover:bg-[#FF5B52] uppercase text-sm font-bold">+ New quote</button>
+        <button data-testid="new-quote-btn" onClick={()=>setShow(true)} className="px-4 py-2 bg-[#B5FF2E] hover:bg-[#C8FF5A] uppercase text-sm font-bold">+ New quote</button>
       </div>
 
       {show && (
@@ -56,10 +56,10 @@ export default function OSQuotes() {
                 <button type="button" onClick={()=>removeItem(i)} className="col-span-1 border border-white/10 uppercase text-xs">×</button>
               </div>
             ))}
-            <button type="button" onClick={addItem} className="text-xs uppercase tracking-widest text-[#FF3B30]" data-testid="qt-add-item">+ Add line</button>
+            <button type="button" onClick={addItem} className="text-xs uppercase tracking-widest text-[#B5FF2E]" data-testid="qt-add-item">+ Add line</button>
           </div>
-          <div className="text-sm font-mono text-right">Subtotal A${subtotal.toFixed(2)} · GST A${gst.toFixed(2)} · <span className="text-[#FF3B30]">Total A${total.toFixed(2)}</span></div>
-          <div className="flex gap-2 justify-end"><button type="button" onClick={()=>setShow(false)} className="px-4 py-2 border border-white/20 uppercase text-sm">Cancel</button><button data-testid="qt-submit" className="px-4 py-2 bg-[#FF3B30] hover:bg-[#FF5B52] uppercase text-sm font-bold">Create quote</button></div>
+          <div className="text-sm font-mono text-right">Subtotal A${subtotal.toFixed(2)} · GST A${gst.toFixed(2)} · <span className="text-[#B5FF2E]">Total A${total.toFixed(2)}</span></div>
+          <div className="flex gap-2 justify-end"><button type="button" onClick={()=>setShow(false)} className="px-4 py-2 border border-white/20 uppercase text-sm">Cancel</button><button data-testid="qt-submit" className="px-4 py-2 bg-[#B5FF2E] hover:bg-[#C8FF5A] uppercase text-sm font-bold">Create quote</button></div>
         </form>
       )}
 
@@ -71,13 +71,13 @@ export default function OSQuotes() {
               <div className="text-xs text-zinc-500 font-mono">{q.vehicle?.make} {q.vehicle?.model} · Total A${q.total?.toFixed(2)}</div>
             </div>
             <div className="flex items-center gap-3">
-              <div className="text-xs uppercase text-[#FF3B30]">{q.status}</div>
-              {q.status === "DRAFT" && <button data-testid={`qt-send-${q.id}`} onClick={()=>send(q.id)} className="px-3 py-1 bg-[#FF3B30] hover:bg-[#FF5B52] uppercase text-xs">Send</button>}
+              <div className="text-xs uppercase text-[#B5FF2E]">{q.status}</div>
+              {q.status === "DRAFT" && <button data-testid={`qt-send-${q.id}`} onClick={()=>send(q.id)} className="px-3 py-1 bg-[#B5FF2E] hover:bg-[#C8FF5A] uppercase text-xs">Send</button>}
             </div>
           </div>
         ))}
       </div>
-      <style>{`.wz-i{background:#0f0f10;border:1px solid #27272a;padding:.55rem .75rem;color:white;outline:none;font-size:.85rem}.wz-i:focus{border-color:#FF3B30}`}</style>
+      <style>{`.wz-i{background:#0f0f10;border:1px solid #27272a;padding:.55rem .75rem;color:white;outline:none;font-size:.85rem}.wz-i:focus{border-color:#B5FF2E}`}</style>
     </div>
   );
 }

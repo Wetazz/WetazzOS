@@ -18,13 +18,13 @@ export default function PortalLayout() {
     <div className="min-h-screen flex bg-black text-white">
       <aside className="w-64 border-r border-white/10 bg-[#0a0a0a] p-4 flex flex-col">
         <Link to="/" className="flex items-center gap-2 mb-6 p-2">
-          <div className="w-8 h-8 bg-[#FF3B30] flex items-center justify-center font-display">W</div>
-          <div><div className="font-display leading-none">WETAZZ</div><div className="text-[10px] tracking-[0.3em] text-zinc-500 uppercase">Portal</div></div>
+          <img src="https://customer-assets-jai6qajn.emergentagent.net/job_workshop-os-3/artifacts/52gfsp8x_1000014390.png" alt="Wetazz" className="h-8 w-8 object-contain" />
+          <div><div className="font-display leading-none text-[#B5FF2E]">WETAZZ</div><div className="text-[10px] tracking-[0.3em] text-zinc-500 uppercase">Portal</div></div>
         </Link>
         <nav className="flex-1 space-y-1">
           {NAV.map(n => (
             <NavLink key={n.to} to={n.to} end={n.end} data-testid={`portal-nav-${n.label.toLowerCase().replace(/ /g,'-')}`}
-              className={({isActive}) => `flex items-center gap-3 px-3 py-2 text-sm uppercase tracking-wide transition-colors ${isActive ? "bg-[#FF3B30]/10 text-[#FF3B30] border-l-2 border-[#FF3B30]" : "text-zinc-400 hover:text-white hover:bg-white/5"}`}>
+              className={({isActive}) => `flex items-center gap-3 px-3 py-2 text-sm uppercase tracking-wide transition-colors ${isActive ? "bg-[#B5FF2E]/10 text-[#B5FF2E] border-l-2 border-[#B5FF2E]" : "text-zinc-400 hover:text-white hover:bg-white/5"}`}>
               <n.icon size={16} /> {n.label}
             </NavLink>
           ))}

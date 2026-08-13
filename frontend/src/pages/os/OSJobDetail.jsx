@@ -16,7 +16,7 @@ export default function OSJobDetail() {
 
   return (
     <div className="p-8 max-w-5xl">
-      <div className="text-[#FF3B30] font-mono text-xs tracking-[0.4em] mb-2">// JOB · {job.job_number}</div>
+      <div className="text-[#B5FF2E] font-mono text-xs tracking-[0.4em] mb-2">// JOB · {job.job_number}</div>
       <h1 className="font-display text-4xl">{job.customer?.first_name} {job.customer?.last_name}</h1>
       <div className="text-zinc-400">{job.vehicle?.year} {job.vehicle?.make} {job.vehicle?.model} · {job.vehicle?.registration}</div>
       <div className="mt-6 grid md:grid-cols-3 gap-4">
@@ -30,8 +30,8 @@ export default function OSJobDetail() {
       <div className="mt-6 border border-white/10 p-6">
         <div className="text-xs uppercase tracking-widest text-zinc-400 mb-3">Labour timer</div>
         <div className="flex gap-2">
-          <button data-testid="labour-start" onClick={start} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 uppercase text-sm flex items-center gap-2"><Play size={14}/> Start</button>
-          <button data-testid="labour-stop" onClick={stop} className="px-4 py-2 bg-[#FF3B30] hover:bg-[#FF5B52] uppercase text-sm flex items-center gap-2"><Square size={14}/> Stop</button>
+          <button data-testid="labour-start" onClick={start} className="px-4 py-2 bg-[#FF2E93] hover:bg-[#FF5CB5] text-black uppercase text-sm flex items-center gap-2"><Play size={14}/> Start</button>
+          <button data-testid="labour-stop" onClick={stop} className="px-4 py-2 bg-[#B5FF2E] hover:bg-[#C8FF5A] uppercase text-sm flex items-center gap-2"><Square size={14}/> Stop</button>
         </div>
       </div>
       <div className="mt-6 border border-white/10 p-6">

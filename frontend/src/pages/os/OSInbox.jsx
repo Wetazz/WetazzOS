@@ -20,7 +20,7 @@ export default function OSInbox() {
         <select data-testid="inbox-customer" value={f.customer_id} onChange={e=>setF({...f,customer_id:e.target.value})} className="wz-i md:col-span-2"><option value="">Customer...</option>{customers.map(c=><option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>)}</select>
         <select value={f.channel} onChange={e=>setF({...f,channel:e.target.value})} className="wz-i"><option>SMS</option><option>EMAIL</option><option>CHAT</option><option>PHONE</option></select>
         <input placeholder="Message body" value={f.body} onChange={e=>setF({...f,body:e.target.value})} className="wz-i md:col-span-2" data-testid="inbox-body"/>
-        <button data-testid="inbox-send" className="bg-[#FF3B30] hover:bg-[#FF5B52] uppercase text-sm font-bold">Log</button>
+        <button data-testid="inbox-send" className="bg-[#B5FF2E] hover:bg-[#C8FF5A] uppercase text-sm font-bold">Log</button>
       </form>
       <div className="space-y-2">
         {rows.map(m => (
@@ -33,7 +33,7 @@ export default function OSInbox() {
           </div>
         ))}
       </div>
-      <style>{`.wz-i{background:#0f0f10;border:1px solid #27272a;padding:.5rem .7rem;color:white;outline:none;font-size:.85rem}.wz-i:focus{border-color:#FF3B30}`}</style>
+      <style>{`.wz-i{background:#0f0f10;border:1px solid #27272a;padding:.5rem .7rem;color:white;outline:none;font-size:.85rem}.wz-i:focus{border-color:#B5FF2E}`}</style>
     </div>
   );
 }

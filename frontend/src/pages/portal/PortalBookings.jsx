@@ -10,7 +10,7 @@ export default function PortalBookings() {
         {rows.map(b => (
           <div key={b.id} className="border border-white/10 p-4 flex items-center justify-between" data-testid={`booking-row-${b.id}`}>
             <div><div className="font-display text-xl">{b.booking_type}</div><div className="text-xs text-zinc-500 font-mono">{b.preferred_date} · {b.preferred_time}</div></div>
-            <div className="text-xs uppercase tracking-widest text-[#FF3B30]">{b.status}</div>
+            <div className="text-xs uppercase tracking-widest text-[#B5FF2E]">{b.status}</div>
           </div>
         ))}
         {!rows.length && <div className="text-zinc-500">No bookings yet.</div>}

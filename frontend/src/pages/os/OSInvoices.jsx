@@ -13,7 +13,7 @@ export default function OSInvoices() {
               <div className="font-display text-lg">{i.invoice_number} · {i.customer?.first_name} {i.customer?.last_name}</div>
               <div className="text-xs font-mono text-zinc-500">Total A${i.total?.toFixed(2)} · Balance A${i.balance?.toFixed(2)}</div>
             </div>
-            <div className="text-xs uppercase text-[#FF3B30]">{i.status}</div>
+            <div className="text-xs uppercase text-[#B5FF2E]">{i.status}</div>
           </div>
         ))}
         {!rows.length && <div className="text-zinc-500">No invoices yet.</div>}

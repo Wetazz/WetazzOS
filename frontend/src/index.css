@@ -8,8 +8,9 @@
     --wz-bg: #0A0A0A;
     --wz-paper: #141414;
     --wz-border: #27272A;
-    --wz-primary: #FF3B30;
-    --wz-primary-hover: #FF5B52;
+    --wz-primary: #B5FF2E;
+    --wz-primary-hover: #C8FF5A;
+    --wz-accent: #FF2E93;
     --wz-text: #FFFFFF;
     --wz-muted: #A1A1AA;
 }
@@ -69,19 +70,19 @@ body {
         --card-foreground: 0 0% 98%;
         --popover: 0 0% 6%;
         --popover-foreground: 0 0% 98%;
-        --primary: 4 100% 59%;
-        --primary-foreground: 0 0% 100%;
+        --primary: 82 100% 59%;
+        --primary-foreground: 0 0% 0%;
         --secondary: 0 0% 12%;
         --secondary-foreground: 0 0% 98%;
         --muted: 0 0% 14%;
         --muted-foreground: 0 0% 65%;
-        --accent: 4 100% 59%;
+        --accent: 328 100% 59%;
         --accent-foreground: 0 0% 100%;
         --destructive: 0 84% 60%;
         --destructive-foreground: 0 0% 98%;
         --border: 0 0% 16%;
         --input: 0 0% 14%;
-        --ring: 4 100% 59%;
+        --ring: 82 100% 59%;
         --radius: 0.125rem;
     }
 }

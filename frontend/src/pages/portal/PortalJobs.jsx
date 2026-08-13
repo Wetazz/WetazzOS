@@ -11,7 +11,7 @@ export default function PortalJobs() {
           <div key={j.id} className="border border-white/10 p-4" data-testid={`job-row-${j.id}`}>
             <div className="flex items-baseline justify-between">
               <div className="font-display text-xl">{j.job_number} · {j.job_type}</div>
-              <div className="text-xs uppercase tracking-widest text-[#FF3B30]">{j.status}</div>
+              <div className="text-xs uppercase tracking-widest text-[#B5FF2E]">{j.status}</div>
             </div>
             <div className="text-xs text-zinc-500 font-mono">{j.vehicle?.year || ""} {j.vehicle?.make} {j.vehicle?.model} · {j.vehicle?.registration}</div>
           </div>

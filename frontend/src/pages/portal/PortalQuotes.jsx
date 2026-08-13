@@ -23,14 +23,14 @@ export default function PortalQuotes() {
           <div key={q.id} className="border border-white/10 p-5" data-testid={`quote-row-${q.id}`}>
             <div className="flex items-baseline justify-between">
               <div className="font-display text-xl">{q.quote_number}</div>
-              <div className="text-xs uppercase tracking-widest text-[#FF3B30]">{q.status}</div>
+              <div className="text-xs uppercase tracking-widest text-[#B5FF2E]">{q.status}</div>
             </div>
             <div className="font-mono text-lg mt-1">Total A${q.total?.toFixed(2)} · GST A${q.gst?.toFixed(2)}</div>
             {q.deposit_required > 0 && <div className="text-xs text-zinc-400 font-mono">Deposit required A${q.deposit_required?.toFixed(2)}</div>}
             <div className="flex gap-2 mt-3">
-              {["SENT","VIEWED"].includes(q.status) && <button data-testid={`quote-approve-${q.id}`} onClick={()=>act(q.id,"APPROVED")} className="px-3 py-1 bg-[#FF3B30] uppercase text-xs">Approve</button>}
+              {["SENT","VIEWED"].includes(q.status) && <button data-testid={`quote-approve-${q.id}`} onClick={()=>act(q.id,"APPROVED")} className="px-3 py-1 bg-[#B5FF2E] text-black uppercase text-xs">Approve</button>}
               {["SENT","VIEWED"].includes(q.status) && <button data-testid={`quote-reject-${q.id}`} onClick={()=>act(q.id,"REJECTED")} className="px-3 py-1 border border-white/20 uppercase text-xs">Reject</button>}
-              {q.status === "APPROVED" && q.deposit_required > 0 && !q.deposit_paid && <button data-testid={`quote-deposit-${q.id}`} onClick={()=>payDeposit(q)} className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 uppercase text-xs">Pay deposit</button>}
+              {q.status === "APPROVED" && q.deposit_required > 0 && !q.deposit_paid && <button data-testid={`quote-deposit-${q.id}`} onClick={()=>payDeposit(q)} className="px-3 py-1 bg-[#FF2E93] hover:bg-[#FF5CB5] text-black uppercase text-xs">Pay deposit</button>}
               {q.deposit_paid > 0 && <span className="px-3 py-1 border border-emerald-500/30 text-emerald-400 uppercase text-xs">Deposit paid A${q.deposit_paid?.toFixed(2)}</span>}
             </div>
           </div>

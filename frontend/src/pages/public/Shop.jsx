@@ -6,7 +6,7 @@ const products = [
 export default function Shop() {
   return (
     <div className="max-w-7xl mx-auto px-6 py-16">
-      <div className="text-[#FF3B30] font-mono text-xs tracking-[0.4em] mb-2">// MERCH</div>
+      <div className="text-[#B5FF2E] font-mono text-xs tracking-[0.4em] mb-2">// MERCH</div>
       <h1 className="font-display text-5xl mb-8">Shop</h1>
       <div className="grid md:grid-cols-3 gap-6">
         {products.map(p => (

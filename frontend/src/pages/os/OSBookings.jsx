@@ -22,7 +22,7 @@ export default function OSBookings() {
                 <td className="px-4 py-2">{b.customer?.first_name} {b.customer?.last_name}</td>
                 <td className="px-4 py-2">{b.booking_type}</td>
                 <td className="px-4 py-2">{b.service_type}</td>
-                <td className="px-4 py-2 text-xs uppercase text-[#FF3B30]">{b.status}</td>
+                <td className="px-4 py-2 text-xs uppercase text-[#B5FF2E]">{b.status}</td>
               </tr>
             ))}
           </tbody>

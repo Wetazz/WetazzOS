@@ -990,18 +990,215 @@ async def seed(force: bool = False):
 @api.get("/business")
 async def business_info():
     return {
-        "name": "Wetazz Paint Panel & Mechanical",
-        "tagline": "Precision Paint. Panel. Mechanical.",
-        "phone": "+61 3 9999 0000",
+        "name": "Wetazz Paint & Panel Mechanical",
+        "tagline": "Paint · Panel · Mechanical",
+        "phone": "+61 2 0000 0000",
         "email": "hello@wetazz.com.au",
-        "address": "Melbourne, Victoria, Australia",
+        "address": "89 Maxwell St, Wellington NSW, Australia",
         "hours": {"Mon-Fri": "8:00 – 17:30", "Sat": "9:00 – 13:00", "Sun": "Closed"},
         "services": [
-            {"category": "PAINT", "items": ["Full resprays", "Panel painting", "Colour matching", "Spot repairs", "Touch-ups", "Clear coat repairs"]},
-            {"category": "PANEL", "items": ["Dent repairs", "Panel replacement", "Bumper repairs", "Accident repairs", "Smash repairs", "Damage assessment"]},
-            {"category": "MECHANICAL", "items": ["Servicing", "Diagnostics", "Brakes", "Suspension", "Cooling systems", "Engine repairs", "Mechanical inspections"]},
+            {"category": "MECHANICAL", "items": ["Log book servicing", "Brakes", "Suspension", "Tyres", "Batteries", "Diagnostics", "Cooling systems", "Engine repairs", "Mechanical inspections"]},
+            {"category": "PANEL", "items": ["Panel repairs", "Dent repairs", "Panel replacement", "Bumper repairs", "Accident repairs", "Smash repairs", "Damage assessment"]},
+            {"category": "PAINT", "items": ["Paint work", "Full resprays", "Panel painting", "Colour matching", "Spot repairs", "Touch-ups", "Clear coat repairs"]},
+            {"category": "ACCESSORIES", "items": ["4WD accessory fitting", "Spare parts"]},
         ],
     }
+
+
+# ============================================================
+# PARTS & SUPPLIERS
+# ============================================================
+class SupplierIn(BaseModel):
+    name: str
+    contact: Optional[str] = ""
+    email: Optional[str] = ""
+    phone: Optional[str] = ""
+    notes: Optional[str] = ""
+
+
+class PartIn(BaseModel):
+    part_number: str
+    oem_number: Optional[str] = ""
+    description: str
+    manufacturer: Optional[str] = ""
+    supplier_id: Optional[str] = None
+    cost: float = 0.0
+    selling_price: float = 0.0
+    gst_inclusive: bool = False
+    stock: float = 0.0
+    minimum_stock: float = 0.0
+    location: Optional[str] = ""
+    fitment: Optional[str] = ""
+
+
+@api.post("/suppliers")
+async def create_supplier(data: SupplierIn, user=Depends(require_roles(*STAFF_ROLES))):
+    doc = data.model_dump(); doc.update({"id": uid(), "created_at": now_iso()})
+    await db.suppliers.insert_one(doc); doc.pop("_id", None); return doc
+
+
+@api.get("/suppliers")
+async def list_suppliers(user=Depends(require_roles(*STAFF_ROLES))):
+    return await db.suppliers.find({}, {"_id": 0}).sort("name", 1).to_list(500)
+
+
+@api.post("/parts")
+async def create_part(data: PartIn, user=Depends(require_roles(*STAFF_ROLES))):
+    doc = data.model_dump(); doc.update({"id": uid(), "created_at": now_iso()})
+    await db.parts.insert_one(doc); doc.pop("_id", None); return doc
+
+
+@api.get("/parts")
+async def list_parts(q: str = "", user=Depends(require_roles(*STAFF_ROLES))):
+    filt = {}
+    if q:
+        rx = {"$regex": q, "$options": "i"}
+        filt = {"$or": [{"part_number": rx}, {"oem_number": rx}, {"description": rx}, {"manufacturer": rx}]}
+    rows = await db.parts.find(filt, {"_id": 0}).sort("part_number", 1).to_list(1000)
+    sup_map = {s["id"]: s for s in await db.suppliers.find({}, {"_id": 0}).to_list(500)}
+    for p in rows:
+        p["supplier"] = sup_map.get(p.get("supplier_id"))
+    return rows
+
+
+@api.post("/parts/{pid}/adjust-stock")
+async def adjust_stock(pid: str, body: dict, user=Depends(require_roles(*STAFF_ROLES))):
+    delta = float(body.get("delta", 0)); reason = body.get("reason", "manual")
+    await db.parts.update_one({"id": pid}, {"$inc": {"stock": delta}})
+    await db.stock_adjustments.insert_one({"id": uid(), "part_id": pid, "delta": delta, "reason": reason, "at": now_iso(), "user_id": user["id"]})
+    return {"ok": True}
+
+
+# ============================================================
+# BAYS + AVAILABILITY
+# ============================================================
+class BayIn(BaseModel):
+    name: str
+    kind: str = "GENERAL"  # PAINT | PANEL | MECHANICAL | GENERAL
+    active: bool = True
+
+
+class BlockIn(BaseModel):
+    bay_id: Optional[str] = None
+    date: str  # YYYY-MM-DD
+    start_time: str  # HH:MM
+    end_time: str
+    reason: Optional[str] = ""
+
+
+@api.post("/bays")
+async def create_bay(data: BayIn, user=Depends(require_roles("OWNER", "ADMIN"))):
+    doc = data.model_dump(); doc.update({"id": uid(), "created_at": now_iso()})
+    await db.bays.insert_one(doc); doc.pop("_id", None); return doc
+
+
+@api.get("/bays")
+async def list_bays(user=Depends(require_roles(*STAFF_ROLES))):
+    return await db.bays.find({"active": True}, {"_id": 0}).to_list(100)
+
+
+@api.post("/blocks")
+async def create_block(data: BlockIn, user=Depends(require_roles(*STAFF_ROLES))):
+    doc = data.model_dump(); doc.update({"id": uid(), "created_at": now_iso()})
+    await db.calendar_blocks.insert_one(doc); doc.pop("_id", None); return doc
+
+
+@api.get("/calendar")
+async def calendar_range(start: str, end: str, user=Depends(require_roles(*STAFF_ROLES))):
+    bookings = await db.bookings.find({"preferred_date": {"$gte": start, "$lte": end}}, {"_id": 0}).to_list(1000)
+    for b in bookings:
+        b["customer"] = await db.customers.find_one({"id": b["customer_id"]}, {"_id": 0, "first_name": 1, "last_name": 1})
+    blocks = await db.calendar_blocks.find({"date": {"$gte": start, "$lte": end}}, {"_id": 0}).to_list(500)
+    return {"bookings": bookings, "blocks": blocks}
+
+
+@api.get("/calendar/availability")
+async def availability(date: str, user=Depends(require_roles(*STAFF_ROLES))):
+    """Return slot occupancy for a given date. Slots are 30-min from 08:00-17:30."""
+    bays = await db.bays.find({"active": True}, {"_id": 0}).to_list(100)
+    if not bays:
+        bays = [{"id": "_default", "name": "Bay 1"}, {"id": "_default2", "name": "Bay 2"}]
+    slots = []
+    hours = list(range(8, 18))
+    for h in hours:
+        for m in (0, 30):
+            slots.append(f"{h:02d}:{m:02d}")
+    booked = await db.bookings.find({"preferred_date": date}, {"_id": 0, "preferred_time": 1}).to_list(200)
+    booked_times = [b["preferred_time"][:5] for b in booked]
+    return {"date": date, "bays": bays, "slots": slots, "booked": booked_times}
+
+
+# ============================================================
+# ACCOUNTING (built-in, not external)
+# ============================================================
+class ExpenseIn(BaseModel):
+    category: str
+    description: str
+    amount: float
+    supplier_id: Optional[str] = None
+    date: str
+
+
+@api.post("/accounting/expenses")
+async def create_expense(data: ExpenseIn, user=Depends(require_roles("OWNER", "ADMIN"))):
+    doc = data.model_dump(); doc.update({"id": uid(), "created_at": now_iso(), "created_by": user["id"]})
+    await db.expenses.insert_one(doc); doc.pop("_id", None)
+    # Journal entry
+    await db.journal.insert_one({
+        "id": uid(), "kind": "EXPENSE", "ref_id": doc["id"], "date": data.date,
+        "debit_account": data.category, "credit_account": "CASH",
+        "amount": data.amount, "created_at": now_iso(),
+    })
+    return doc
+
+
+@api.get("/accounting/expenses")
+async def list_expenses(user=Depends(require_roles("OWNER", "ADMIN"))):
+    return await db.expenses.find({}, {"_id": 0}).sort("date", -1).to_list(500)
+
+
+@api.get("/accounting/summary")
+async def accounting_summary(user=Depends(require_roles("OWNER", "ADMIN"))):
+    # Revenue from paid invoice-linked payments + invoice paid amounts
+    revenue = 0.0; gst_collected = 0.0
+    async for inv in db.invoices.find({}):
+        revenue += inv.get("amount_paid", 0.0)
+    async for p in db.payment_transactions.find({"payment_status": "paid", "kind": "DEPOSIT"}):
+        revenue += p.get("amount_cents", 0) / 100.0
+    # GST from paid invoices proportionally
+    async for inv in db.invoices.find({"status": {"$in": ["PAID", "PARTIALLY_PAID"]}}):
+        gst_collected += inv.get("gst", 0.0) * (inv.get("amount_paid", 0.0) / max(inv.get("total", 1.0), 0.01))
+
+    expenses_total = 0.0; expenses_by_cat = {}
+    async for e in db.expenses.find({}):
+        expenses_total += e.get("amount", 0.0)
+        expenses_by_cat[e["category"]] = expenses_by_cat.get(e["category"], 0.0) + e.get("amount", 0.0)
+
+    # AR
+    ar = 0.0
+    async for inv in db.invoices.find({"status": {"$ne": "PAID"}}):
+        ar += inv.get("balance", 0.0)
+
+    # Deposits held (paid deposits linked to non-completed quotes)
+    deposits_held = 0.0
+    async for p in db.payment_transactions.find({"payment_status": "paid", "kind": "DEPOSIT"}):
+        deposits_held += p.get("amount_cents", 0) / 100.0
+
+    gross_profit = revenue - expenses_total
+    return {
+        "revenue": round(revenue, 2),
+        "expenses": round(expenses_total, 2),
+        "gross_profit": round(gross_profit, 2),
+        "gst_collected": round(gst_collected, 2),
+        "accounts_receivable": round(ar, 2),
+        "deposits_held": round(deposits_held, 2),
+        "expenses_by_category": {k: round(v, 2) for k, v in expenses_by_cat.items()},
+    }
+
+
+@api.get("/accounting/journal")
+async def list_journal(user=Depends(require_roles("OWNER", "ADMIN"))):
+    return await db.journal.find({}, {"_id": 0}).sort("date", -1).to_list(1000)
 
 
 # ============================================================

@@ -27,10 +27,10 @@ export default function Signup() {
         <input data-testid="signup-email" required type="email" placeholder="Email" value={f.email} onChange={e=>set("email",e.target.value)} className="wz-input3"/>
         <input data-testid="signup-phone" placeholder="Phone" value={f.phone} onChange={e=>set("phone",e.target.value)} className="wz-input3"/>
         <input data-testid="signup-password" required type="password" placeholder="Password (min 8)" minLength={8} value={f.password} onChange={e=>set("password",e.target.value)} className="wz-input3"/>
-        <button data-testid="signup-submit" disabled={busy} className="w-full bg-[#FF3B30] hover:bg-[#FF5B52] py-3 font-bold uppercase tracking-widest disabled:opacity-50">{busy?"Creating...":"Sign up"}</button>
-        <div className="text-sm text-zinc-400 text-center">Already have an account? <Link to="/login" className="text-[#FF3B30]">Login</Link></div>
+        <button data-testid="signup-submit" disabled={busy} className="w-full bg-[#B5FF2E] hover:bg-[#C8FF5A] py-3 font-bold uppercase tracking-widest disabled:opacity-50">{busy?"Creating...":"Sign up"}</button>
+        <div className="text-sm text-zinc-400 text-center">Already have an account? <Link to="/login" className="text-[#B5FF2E]">Login</Link></div>
       </form>
-      <style>{`.wz-input3{width:100%;background:#0f0f10;border:1px solid #27272a;padding:.75rem 1rem;color:white;outline:none}.wz-input3:focus{border-color:#FF3B30}`}</style>
+      <style>{`.wz-input3{width:100%;background:#0f0f10;border:1px solid #27272a;padding:.75rem 1rem;color:white;outline:none}.wz-input3:focus{border-color:#B5FF2E}`}</style>
     </div>
   );
 }

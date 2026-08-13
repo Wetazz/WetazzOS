@@ -15,13 +15,13 @@ export default function OSDashboard() {
   ];
   return (
     <div className="p-8">
-      <div className="text-[#FF3B30] font-mono text-xs tracking-[0.4em] mb-2">// WETAZZ · CONTROL ROOM</div>
+      <div className="text-[#B5FF2E] font-mono text-xs tracking-[0.4em] mb-2">// WETAZZ · CONTROL ROOM</div>
       <h1 className="font-display text-4xl mb-8">Dashboard</h1>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {tiles.map(t => (
           <div key={t.k} className="border border-white/10 p-5" data-testid={`dash-tile-${t.k.replace(/ /g,'-').toLowerCase()}`}>
             <div className="text-xs uppercase tracking-widest text-zinc-400">{t.k}</div>
-            <div className="font-display text-3xl mt-2 text-[#FF3B30]">{t.v}</div>
+            <div className="font-display text-3xl mt-2 text-[#B5FF2E]">{t.v}</div>
           </div>
         ))}
       </div>
