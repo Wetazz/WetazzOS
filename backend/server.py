@@ -23,7 +23,44 @@ JWT_SECRET = os.environ['JWT_SECRET']
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY', '')
 STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
 STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
+RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
+RESEND_SENDER = os.environ.get('RESEND_SENDER', 'Wetazz Paint & Panel <Office@wetazz.com.au>')
+TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID', '')
+TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN', '')
+TWILIO_FROM = os.environ.get('TWILIO_FROM', '')
+REGO_LOOKUP_API_KEY = os.environ.get('REGO_LOOKUP_API_KEY', '')
 stripe.api_key = STRIPE_SECRET_KEY
+
+
+def provider_configured(channel: str) -> bool:
+    if channel == "EMAIL":
+        return bool(RESEND_API_KEY)
+    if channel == "SMS":
+        return bool(TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_FROM)
+    if channel in ("CHAT", "PHONE", "INTERNAL", "WEBSITE"):
+        return True
+    return False
+
+
+async def auto_log_comm(customer_id: str, channel: str, body: str, workflow_kind: str,
+                        subject: str = "", job_id: Optional[str] = None,
+                        reference_id: Optional[str] = None, direction: str = "OUT"):
+    """Log an outbound communication. If provider not configured, status='NOT_CONFIGURED'
+    (the message is stored so it appears in inbox but is NOT sent). This preserves
+    the audit trail per user's spec — 'do NOT fake successful message delivery'."""
+    if not customer_id:
+        return None
+    configured = provider_configured(channel)
+    doc = {
+        "id": uid(), "customer_id": customer_id, "job_id": job_id,
+        "channel": channel, "direction": direction, "body": body, "subject": subject,
+        "status": "QUEUED" if configured else "NOT_CONFIGURED",
+        "provider": {"EMAIL": "resend", "SMS": "twilio"}.get(channel, "internal"),
+        "workflow_kind": workflow_kind, "reference_id": reference_id,
+        "created_at": now_iso(), "sent_by": "SYSTEM",
+    }
+    await db.communications.insert_one(doc)
+    return doc
 
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
@@ -312,6 +349,17 @@ async def get_customer(cid: str, user=Depends(require_roles(*STAFF_ROLES))):
     c["jobs"] = await db.jobs.find({"customer_id": cid}, {"_id": 0}).sort("created_at", -1).to_list(50)
     c["quotes"] = await db.quotes.find({"customer_id": cid}, {"_id": 0}).sort("created_at", -1).to_list(50)
     c["invoices"] = await db.invoices.find({"customer_id": cid}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    c["bookings"] = await db.bookings.find({"customer_id": cid}, {"_id": 0}).sort("preferred_date", -1).to_list(50)
+    c["communications"] = await db.communications.find({"customer_id": cid}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    c["reviews"] = await db.reviews.find({"customer_id": cid}, {"_id": 0}).sort("requested_at", -1).to_list(20)
+    c["leads"] = await db.leads.find({"customer_id": cid}, {"_id": 0}).sort("created_at", -1).to_list(20)
+    # Payments
+    pays = await db.payment_transactions.find({"user_id": {"$exists": True}, "reference_id": {"$in":
+        [i["id"] for i in c["invoices"]] + [q["id"] for q in c["quotes"]]
+    }}, {"_id": 0}).to_list(100)
+    for p in pays:
+        p["amount"] = round(p.get("amount_cents", 0) / 100.0, 2)
+    c["payments"] = pays
     return c
 
 
@@ -371,9 +419,21 @@ async def get_vehicle(vid: str, user=Depends(current_user)):
         cust = await db.customers.find_one({"user_id": user["id"]})
         if not cust or cust["id"] != v["customer_id"]:
             raise HTTPException(403, "Forbidden")
+    v["customer"] = await db.customers.find_one({"id": v["customer_id"]}, {"_id": 0})
     v["jobs"] = await db.jobs.find({"vehicle_id": vid}, {"_id": 0}).sort("created_at", -1).to_list(100)
     v["quotes"] = await db.quotes.find({"vehicle_id": vid}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    v["invoices"] = await db.invoices.find({"vehicle_id": vid}, {"_id": 0}).sort("created_at", -1).to_list(100)
     v["bookings"] = await db.bookings.find({"vehicle_id": vid}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    job_ids = [j["id"] for j in v["jobs"]]
+    if job_ids:
+        v["photos"] = await db.job_photos.find({"job_id": {"$in": job_ids}}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    else:
+        v["photos"] = []
+    v["documents"] = await db.documents.find({"$or": [
+        {"entity_type": "vehicle", "entity_id": vid},
+        {"entity_type": "job", "entity_id": {"$in": job_ids}},
+    ]}, {"_id": 0, "content_base64": 0}).sort("created_at", -1).to_list(200)
+    v["communications"] = await db.communications.find({"job_id": {"$in": job_ids}}, {"_id": 0}).sort("created_at", -1).to_list(200) if job_ids else []
     return v
 
 
@@ -445,10 +505,16 @@ async def create_booking(data: BookingIn, cred: Optional[HTTPAuthorizationCreden
     }
     await db.bookings.insert_one(doc)
     doc.pop("_id", None)
+    # Auto-comms: booking confirmation
+    cust = await db.customers.find_one({"id": customer_id}, {"_id": 0})
+    if cust:
+        first = cust.get("first_name", "there")
+        confirm_msg = f"Hi {first}, we've received your booking request for {data.preferred_date} at {data.preferred_time} ({data.service_type}). Wetazz Paint & Panel will confirm shortly. — Office@wetazz.com.au"
+        if cust.get("email"):
+            await auto_log_comm(customer_id, "EMAIL", confirm_msg, "BOOKING_CONFIRMATION", subject="Booking received — Wetazz", reference_id=doc["id"])
+        if cust.get("phone"):
+            await auto_log_comm(customer_id, "SMS", confirm_msg, "BOOKING_CONFIRMATION", reference_id=doc["id"])
     return doc
-
-
-@api.get("/bookings")
 async def list_bookings(user=Depends(current_user)):
     filt = {}
     if user["role"] == "CUSTOMER":
@@ -466,7 +532,30 @@ async def list_bookings(user=Depends(current_user)):
 
 @api.patch("/bookings/{bid}")
 async def update_booking(bid: str, patch: dict, user=Depends(require_roles(*STAFF_ROLES))):
-    await db.bookings.update_one({"id": bid}, {"$set": patch})
+    allowed = {"status","assigned_staff_id","bay","bay_kind","preferred_date","preferred_time","notes","description","service_type","booking_type"}
+    clean = {k: v for k, v in patch.items() if k in allowed}
+    if clean:
+        await db.bookings.update_one({"id": bid}, {"$set": {**clean, "updated_at": now_iso()}})
+    # If confirming, auto-comm the customer
+    if clean.get("status") == "CONFIRMED":
+        b = await db.bookings.find_one({"id": bid}, {"_id": 0})
+        cust = await db.customers.find_one({"id": b["customer_id"]}, {"_id": 0}) if b else None
+        if cust:
+            first = cust.get("first_name", "there")
+            msg = f"Hi {first}, your Wetazz booking is confirmed for {b['preferred_date']} at {b['preferred_time']}. See you soon. — Office@wetazz.com.au"
+            if cust.get("email"):
+                await auto_log_comm(cust["id"], "EMAIL", msg, "BOOKING_CONFIRMED", subject="Booking confirmed — Wetazz", reference_id=bid)
+            if cust.get("phone"):
+                await auto_log_comm(cust["id"], "SMS", msg, "BOOKING_CONFIRMED", reference_id=bid)
+    return {"ok": True}
+
+
+@api.patch("/jobs/{jid}/assign")
+async def assign_job(jid: str, patch: dict, user=Depends(require_roles(*STAFF_ROLES))):
+    allowed = {"assigned_staff_id","bay","priority","notes"}
+    clean = {k: v for k, v in patch.items() if k in allowed}
+    if clean:
+        await db.jobs.update_one({"id": jid}, {"$set": {**clean, "updated_at": now_iso()}})
     return {"ok": True}
 
 
@@ -532,6 +621,23 @@ async def get_job(jid: str, user=Depends(current_user)):
     j["quotes"] = await db.quotes.find({"job_id": jid}, {"_id": 0}).to_list(20)
     j["invoices"] = await db.invoices.find({"job_id": jid}, {"_id": 0}).to_list(20)
     j["communications"] = await db.communications.find({"job_id": jid}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    # Labour cost/revenue/variance
+    hours = round((j.get("labour_seconds", 0) or 0) / 3600.0, 2)
+    rate = j.get("labour_rate", 135.0) or 135.0
+    j["labour_hours"] = hours
+    j["labour_revenue"] = round(hours * rate, 2)
+    # Estimated hours from LABOUR items on latest quote
+    est_hours = 0.0
+    for q in j["quotes"]:
+        for it in q.get("items", []):
+            if it.get("kind") == "LABOUR":
+                est_hours += float(it.get("quantity", 0) or 0)
+    j["labour_estimated_hours"] = round(est_hours, 2)
+    j["labour_variance_hours"] = round(hours - est_hours, 2)
+    # Assigned staff
+    if j.get("assigned_staff_id"):
+        st = await db.users.find_one({"id": j["assigned_staff_id"]}, {"_id": 0, "password": 0})
+        j["assigned_staff"] = st
     return j
 
 
@@ -540,6 +646,41 @@ async def update_job_status(jid: str, data: JobStatusIn, user=Depends(require_ro
     if data.status not in JOB_STATUSES:
         raise HTTPException(400, "Invalid status")
     await db.jobs.update_one({"id": jid}, {"$set": {"status": data.status, "updated_at": now_iso()}})
+    # Auto-comms on key status changes
+    job = await db.jobs.find_one({"id": jid}, {"_id": 0})
+    if job:
+        cust = await db.customers.find_one({"id": job["customer_id"]}, {"_id": 0})
+        if cust:
+            first = cust.get("first_name", "there")
+            job_no = job.get("job_number", "")
+            if data.status == "IN_PROGRESS":
+                msg = f"Hi {first}, we've started work on job {job_no}. We'll keep you posted. — Wetazz"
+                if cust.get("email"):
+                    await auto_log_comm(cust["id"], "EMAIL", msg, "JOB_STARTED", subject=f"Job {job_no} started", job_id=jid, reference_id=jid)
+                if cust.get("phone"):
+                    await auto_log_comm(cust["id"], "SMS", msg, "JOB_STARTED", job_id=jid, reference_id=jid)
+            elif data.status == "WAITING_PARTS":
+                msg = f"Hi {first}, your job {job_no} is currently waiting on parts. We'll be back on the tools as soon as they land. — Wetazz"
+                if cust.get("email"):
+                    await auto_log_comm(cust["id"], "EMAIL", msg, "JOB_DELAYED", subject=f"Job {job_no} — waiting on parts", job_id=jid, reference_id=jid)
+            elif data.status == "READY_FOR_COLLECTION":
+                msg = f"Hi {first}, your vehicle is ready for collection (job {job_no}). Please give us a call before you head over. — Wetazz Paint & Panel · 89 Maxwell St, Wellington"
+                if cust.get("email"):
+                    await auto_log_comm(cust["id"], "EMAIL", msg, "READY_FOR_COLLECTION", subject=f"Ready for collection — {job_no}", job_id=jid, reference_id=jid)
+                if cust.get("phone"):
+                    await auto_log_comm(cust["id"], "SMS", msg, "READY_FOR_COLLECTION", job_id=jid, reference_id=jid)
+            elif data.status == "COMPLETED":
+                # Review request record
+                await db.reviews.insert_one({
+                    "id": uid(), "customer_id": cust["id"], "job_id": jid,
+                    "requested_at": now_iso(), "status": "REQUESTED",
+                    "rating": None, "feedback": None,
+                })
+                msg = f"Hi {first}, thanks for choosing Wetazz for job {job_no}! We'd love a quick review — it really helps small businesses like ours. — Sam @ Wetazz"
+                if cust.get("email"):
+                    await auto_log_comm(cust["id"], "EMAIL", msg, "REVIEW_REQUEST", subject="Quick favour? — Wetazz", job_id=jid, reference_id=jid)
+                if cust.get("phone"):
+                    await auto_log_comm(cust["id"], "SMS", msg, "REVIEW_REQUEST", job_id=jid, reference_id=jid)
     return {"ok": True}
 
 
@@ -638,6 +779,22 @@ async def update_quote_status(qid: str, body: dict, user=Depends(current_user)):
         "id": uid(), "user_id": user["id"], "entity": "quote", "entity_id": qid,
         "action": f"status:{new_status}", "at": now_iso(),
     })
+    # Auto-comms
+    q_full = await db.quotes.find_one({"id": qid}, {"_id": 0})
+    cust = await db.customers.find_one({"id": q["customer_id"]}, {"_id": 0}) if q else None
+    if q_full and cust:
+        first = cust.get("first_name", "there")
+        if new_status == "SENT":
+            msg = f"Hi {first}, your quote {q_full['quote_number']} is ready (Total A${q_full['total']:.2f}). Log in to review and approve. — Wetazz"
+            if cust.get("email"):
+                await auto_log_comm(cust["id"], "EMAIL", msg, "QUOTE_SENT", subject=f"Quote {q_full['quote_number']} — Wetazz", reference_id=qid, job_id=q_full.get("job_id"))
+        elif new_status == "APPROVED":
+            if q_full.get("deposit_required", 0) > 0:
+                msg = f"Thanks {first}! To lock in your booking, please pay the A${q_full['deposit_required']:.2f} deposit for quote {q_full['quote_number']}."
+                if cust.get("email"):
+                    await auto_log_comm(cust["id"], "EMAIL", msg, "DEPOSIT_REQUIRED", subject="Deposit required — Wetazz", reference_id=qid, job_id=q_full.get("job_id"))
+                if cust.get("phone"):
+                    await auto_log_comm(cust["id"], "SMS", msg, "DEPOSIT_REQUIRED", reference_id=qid, job_id=q_full.get("job_id"))
     return {"ok": True}
 
 
@@ -665,6 +822,13 @@ async def create_invoice(data: InvoiceIn, user=Depends(require_roles(*STAFF_ROLE
     }
     await db.invoices.insert_one(doc)
     doc.pop("_id", None)
+    # Auto-comms
+    cust = await db.customers.find_one({"id": data.customer_id}, {"_id": 0})
+    if cust:
+        first = cust.get("first_name", "there")
+        msg = f"Hi {first}, invoice {doc['invoice_number']} for A${doc['total']:.2f} is ready in your Wetazz portal. Balance A${doc['balance']:.2f}. — Office@wetazz.com.au"
+        if cust.get("email"):
+            await auto_log_comm(cust["id"], "EMAIL", msg, "INVOICE_CREATED", subject=f"Invoice {doc['invoice_number']} — Wetazz", reference_id=doc["id"], job_id=data.job_id)
     return doc
 
 
@@ -808,11 +972,178 @@ async def analytics(user=Depends(require_roles(*STAFF_ROLES))):
     status_counts = {}
     for s in JOB_STATUSES:
         status_counts[s] = await db.jobs.count_documents({"status": s})
+    # Quotes awaiting approval
+    quotes_awaiting = await db.quotes.count_documents({"status": {"$in": ["SENT", "VIEWED"]}})
+    # Deposits outstanding — approved quotes with deposit required but no deposit_paid
+    deposits_outstanding_count = await db.quotes.count_documents({
+        "status": "APPROVED", "deposit_required": {"$gt": 0},
+        "$or": [{"deposit_paid": {"$exists": False}}, {"deposit_paid": 0}, {"deposit_paid": None}],
+    })
+    deposits_outstanding_amount = 0.0
+    async for q in db.quotes.find({"status": "APPROVED", "deposit_required": {"$gt": 0}}):
+        if not q.get("deposit_paid"):
+            deposits_outstanding_amount += q.get("deposit_required", 0.0)
+    # New leads = customers with status LEAD
+    new_leads = await db.customers.count_documents({"status": "LEAD"})
+    # Conversion rate: customers with an APPROVED quote / total customers with at least one quote
+    quoted_ids = await db.quotes.distinct("customer_id")
+    approved_ids = await db.quotes.distinct("customer_id", {"status": {"$in": ["APPROVED"]}})
+    conv_rate = round((len(approved_ids) / len(quoted_ids)) * 100, 1) if quoted_ids else 0.0
+    # Jobs overdue: open jobs with created_at > 30d ago (heuristic since we don't track expected date on every job)
+    thirty_days_ago = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    overdue = await db.jobs.count_documents({"status": {"$nin": ["COMPLETED", "CLOSED"]}, "created_at": {"$lt": thirty_days_ago}})
+    # Staff workload
+    staff_workload = {}
+    staff_rows = await db.users.find({"role": {"$in": STAFF_ROLES}}, {"_id": 0, "id": 1, "first_name": 1, "last_name": 1}).to_list(100)
+    for s in staff_rows:
+        cnt = await db.jobs.count_documents({"assigned_staff_id": s["id"], "status": {"$nin": ["COMPLETED", "CLOSED"]}})
+        staff_workload[f"{s.get('first_name','')} {s.get('last_name','')}".strip()] = cnt
     return {
         "open_jobs": open_jobs, "ready_jobs": ready_jobs, "bookings_today": bookings_today,
         "outstanding_receivable": round(outstanding, 2), "revenue_collected": round(paid_total, 2),
         "customers": total_customers, "vehicles": total_vehicles, "status_counts": status_counts,
+        "quotes_awaiting_approval": quotes_awaiting,
+        "deposits_outstanding_count": deposits_outstanding_count,
+        "deposits_outstanding_amount": round(deposits_outstanding_amount, 2),
+        "new_leads": new_leads, "conversion_rate": conv_rate,
+        "jobs_overdue": overdue, "staff_workload": staff_workload,
     }
+
+
+@api.get("/integrations/status")
+async def integrations_status(user=Depends(require_roles(*STAFF_ROLES))):
+    return {
+        "email": {"provider": "resend", "configured": bool(RESEND_API_KEY), "sender": RESEND_SENDER},
+        "sms": {"provider": "twilio", "configured": bool(TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_FROM), "from": TWILIO_FROM or None},
+        "stripe": {"provider": "stripe", "configured": bool(STRIPE_SECRET_KEY), "mode": os.environ.get("STRIPE_MODE", "test")},
+        "rego_lookup": {"provider": "rego_lookup", "configured": bool(REGO_LOOKUP_API_KEY)},
+        "ai": {"provider": "claude-sonnet-5", "configured": bool(EMERGENT_LLM_KEY)},
+        "phone": {"provider": None, "configured": False},
+    }
+
+
+class WebsiteEnquiryIn(BaseModel):
+    first_name: str
+    last_name: str
+    email: Optional[str] = ""
+    phone: Optional[str] = ""
+    subject: Optional[str] = ""
+    message: str
+
+
+@api.post("/public/enquiries")
+async def create_enquiry(data: WebsiteEnquiryIn):
+    if not (data.email or data.phone):
+        raise HTTPException(400, "Email or phone required")
+    # Create lead + customer if not exists
+    cust = None
+    if data.email:
+        cust = await db.customers.find_one({"email": data.email.lower()})
+    if not cust and data.phone:
+        cust = await db.customers.find_one({"phone": data.phone})
+    if not cust:
+        cust = {
+            "id": uid(), "first_name": data.first_name, "last_name": data.last_name,
+            "email": (data.email or "").lower(), "phone": data.phone or "",
+            "business_name": "", "address": "", "customer_type": "PRIVATE",
+            "preferred_contact": "EMAIL" if data.email else "SMS", "notes": "",
+            "status": "LEAD", "created_at": now_iso(), "last_contact": now_iso(),
+        }
+        await db.customers.insert_one(cust)
+    lead = {
+        "id": uid(), "customer_id": cust["id"], "source": "WEBSITE",
+        "stage": "NEW", "subject": data.subject, "enquiry": data.message,
+        "created_at": now_iso(),
+    }
+    await db.leads.insert_one(lead)
+    # Log as inbound WEBSITE comm
+    await auto_log_comm(
+        cust["id"], "WEBSITE",
+        f"[{data.subject or 'Website enquiry'}] {data.message}",
+        "WEBSITE_ENQUIRY", subject=data.subject or "Website enquiry",
+        direction="IN", reference_id=lead["id"],
+    )
+    return {"ok": True, "lead_id": lead["id"]}
+
+
+@api.get("/leads")
+async def list_leads(user=Depends(require_roles(*STAFF_ROLES))):
+    rows = await db.leads.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    for r in rows:
+        r["customer"] = await db.customers.find_one({"id": r["customer_id"]}, {"_id": 0, "first_name": 1, "last_name": 1, "email": 1, "phone": 1})
+    return rows
+
+
+class ProfileUpdateIn(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[EmailStr] = None
+    address: Optional[str] = None
+    preferred_contact: Optional[str] = None
+
+
+@api.patch("/me/profile")
+async def update_my_profile(data: ProfileUpdateIn, user=Depends(current_user)):
+    patch = {k: v for k, v in data.model_dump().items() if v is not None}
+    if not patch:
+        return {"ok": True, "updated": 0}
+    await db.users.update_one({"id": user["id"]}, {"$set": patch})
+    if user["role"] == "CUSTOMER":
+        await db.customers.update_one({"user_id": user["id"]}, {"$set": patch})
+    return {"ok": True, "updated": len(patch)}
+
+
+@api.patch("/customers/{cid}")
+async def update_customer(cid: str, patch: dict, user=Depends(require_roles(*STAFF_ROLES))):
+    allowed = {"first_name","last_name","business_name","email","phone","address","preferred_contact","notes","status","customer_type"}
+    clean = {k: v for k, v in patch.items() if k in allowed}
+    if clean:
+        await db.customers.update_one({"id": cid}, {"$set": clean})
+    return {"ok": True}
+
+
+@api.get("/me/payments")
+async def my_payments(user=Depends(current_user)):
+    rows = await db.payment_transactions.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    for r in rows:
+        r["amount"] = round(r.get("amount_cents", 0) / 100.0, 2)
+    return rows
+
+
+@api.get("/me/documents")
+async def my_documents(user=Depends(current_user)):
+    """All documents visible to the current customer across their entities."""
+    if user["role"] != "CUSTOMER":
+        raise HTTPException(403, "Customer only")
+    cust = await db.customers.find_one({"user_id": user["id"]})
+    if not cust:
+        return []
+    cid = cust["id"]
+    veh_ids = [v["id"] async for v in db.vehicles.find({"customer_id": cid}, {"id": 1})]
+    job_ids = [j["id"] async for j in db.jobs.find({"customer_id": cid}, {"id": 1})]
+    q_ids = [q["id"] async for q in db.quotes.find({"customer_id": cid}, {"id": 1})]
+    inv_ids = [i["id"] async for i in db.invoices.find({"customer_id": cid}, {"id": 1})]
+    b_ids = [b["id"] async for b in db.bookings.find({"customer_id": cid}, {"id": 1})]
+    match = {"$or": [
+        {"entity_type": "customer", "entity_id": cid},
+        {"entity_type": "vehicle", "entity_id": {"$in": veh_ids}},
+        {"entity_type": "job", "entity_id": {"$in": job_ids}},
+        {"entity_type": "quote", "entity_id": {"$in": q_ids}},
+        {"entity_type": "invoice", "entity_id": {"$in": inv_ids}},
+        {"entity_type": "booking", "entity_id": {"$in": b_ids}},
+    ]}
+    return await db.documents.find(match, {"_id": 0, "content_base64": 0}).sort("created_at", -1).to_list(500)
+
+
+@api.get("/me/messages")
+async def my_messages(user=Depends(current_user)):
+    if user["role"] != "CUSTOMER":
+        raise HTTPException(403, "Customer only")
+    cust = await db.customers.find_one({"user_id": user["id"]})
+    if not cust:
+        return []
+    return await db.communications.find({"customer_id": cust["id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
 
 
 # ============================================================
@@ -839,6 +1170,7 @@ async def ai_photo_estimate(data: AiPhotoIn):
     img = ImageContent(image_base64=data.image_base64)
     prompt = f"Vehicle: {data.vehicle_make} {data.vehicle_model}. Customer notes: {data.description or 'none'}. Analyse the visible damage."
     full = ""
+    ai_error = None
     try:
         async for ev in chat.stream_message(UserMessage(text=prompt, file_contents=[img])):
             if isinstance(ev, TextDelta):
@@ -846,7 +1178,8 @@ async def ai_photo_estimate(data: AiPhotoIn):
             elif isinstance(ev, StreamDone):
                 break
     except Exception as e:
-        raise HTTPException(500, f"AI error: {e}")
+        ai_error = str(e)
+        log.warning(f"AI photo estimate upstream error: {ai_error}")
     # Try parse JSON
     import json, re
     parsed = None
@@ -856,7 +1189,7 @@ async def ai_photo_estimate(data: AiPhotoIn):
             parsed = json.loads(m.group(0))
     except Exception:
         pass
-    return {"raw": full, "estimate": parsed, "error": error, "disclaimer": "PRELIMINARY AI ESTIMATE — SUBJECT TO PHYSICAL INSPECTION"}
+    return {"raw": full, "estimate": parsed, "disclaimer": "PRELIMINARY AI ESTIMATE — SUBJECT TO PHYSICAL INSPECTION"}
 
 
 @api.post("/ai/assistant")
@@ -1006,7 +1339,7 @@ async def business_info():
         "name": "Wetazz Paint & Panel Mechanical",
         "tagline": "Paint · Panel · Mechanical",
         "phone": "+61 2 0000 0000",
-        "email": "hello@wetazz.com.au",
+        "email": "Office@wetazz.com.au",
         "address": "89 Maxwell St, Wellington NSW, Australia",
         "hours": {"Mon-Fri": "8:00 – 17:30", "Sat": "9:00 – 13:00", "Sun": "Closed"},
         "services": [
@@ -1312,6 +1645,97 @@ async def assessor_view(token: str):
     j["quotes"] = await db.quotes.find({"job_id": jid}, {"_id": 0}).to_list(20)
     j["photos"] = await db.job_photos.find({"job_id": jid}, {"_id": 0}).sort("created_at", 1).to_list(200)
     return j
+
+
+class DocumentIn(BaseModel):
+    entity_type: str  # customer | vehicle | job | quote | invoice | booking
+    entity_id: str
+    filename: str
+    mime_type: Optional[str] = "application/octet-stream"
+    content_base64: str
+    label: Optional[str] = ""
+
+
+@api.post("/documents")
+async def upload_document(data: DocumentIn, user=Depends(current_user)):
+    valid = {"customer","vehicle","job","quote","invoice","booking"}
+    if data.entity_type not in valid:
+        raise HTTPException(400, "Invalid entity_type")
+    # Customer scoping
+    if user["role"] == "CUSTOMER":
+        cust = await db.customers.find_one({"user_id": user["id"]})
+        if not cust:
+            raise HTTPException(403, "Forbidden")
+        cid = cust["id"]
+        if data.entity_type == "customer" and data.entity_id != cid:
+            raise HTTPException(403, "Forbidden")
+        if data.entity_type in ("vehicle","job","quote","invoice","booking"):
+            coll = {"vehicle":"vehicles","job":"jobs","quote":"quotes","invoice":"invoices","booking":"bookings"}[data.entity_type]
+            row = await db[coll].find_one({"id": data.entity_id})
+            if not row or row.get("customer_id") != cid:
+                raise HTTPException(403, "Forbidden")
+    size = len(data.content_base64) * 3 // 4
+    if size > 15 * 1024 * 1024:
+        raise HTTPException(413, "File too large (max 15MB)")
+    doc = {
+        "id": uid(), "entity_type": data.entity_type, "entity_id": data.entity_id,
+        "filename": data.filename, "mime_type": data.mime_type, "label": data.label,
+        "size_bytes": size, "uploaded_by": user["id"], "uploaded_by_role": user["role"],
+        "created_at": now_iso(), "content_base64": data.content_base64,
+    }
+    await db.documents.insert_one(doc)
+    return {"id": doc["id"], "size_bytes": size, "created_at": doc["created_at"]}
+
+
+@api.get("/documents")
+async def list_documents(entity_type: str, entity_id: str, user=Depends(current_user)):
+    if user["role"] == "CUSTOMER":
+        cust = await db.customers.find_one({"user_id": user["id"]})
+        if not cust:
+            return []
+        if entity_type == "customer" and entity_id != cust["id"]:
+            raise HTTPException(403, "Forbidden")
+        if entity_type in ("vehicle","job","quote","invoice","booking"):
+            coll = {"vehicle":"vehicles","job":"jobs","quote":"quotes","invoice":"invoices","booking":"bookings"}[entity_type]
+            row = await db[coll].find_one({"id": entity_id})
+            if not row or row.get("customer_id") != cust["id"]:
+                raise HTTPException(403, "Forbidden")
+    rows = await db.documents.find(
+        {"entity_type": entity_type, "entity_id": entity_id},
+        {"_id": 0, "content_base64": 0}
+    ).sort("created_at", -1).to_list(200)
+    return rows
+
+
+@api.get("/documents/{did}/download")
+async def download_document(did: str, user=Depends(current_user)):
+    from fastapi.responses import Response
+    doc = await db.documents.find_one({"id": did})
+    if not doc:
+        raise HTTPException(404, "Not found")
+    if user["role"] == "CUSTOMER":
+        cust = await db.customers.find_one({"user_id": user["id"]})
+        et, eid = doc["entity_type"], doc["entity_id"]
+        allowed = False
+        if cust:
+            if et == "customer" and eid == cust["id"]:
+                allowed = True
+            elif et in ("vehicle","job","quote","invoice","booking"):
+                coll = {"vehicle":"vehicles","job":"jobs","quote":"quotes","invoice":"invoices","booking":"bookings"}[et]
+                row = await db[coll].find_one({"id": eid})
+                if row and row.get("customer_id") == cust["id"]:
+                    allowed = True
+        if not allowed:
+            raise HTTPException(403, "Forbidden")
+    content = base64.b64decode(doc["content_base64"])
+    return Response(content=content, media_type=doc.get("mime_type","application/octet-stream"),
+                    headers={"Content-Disposition": f'attachment; filename="{doc["filename"]}"'})
+
+
+@api.delete("/documents/{did}")
+async def delete_document(did: str, user=Depends(require_roles(*STAFF_ROLES))):
+    r = await db.documents.delete_one({"id": did})
+    return {"deleted": r.deleted_count}
 
 
 # ============================================================

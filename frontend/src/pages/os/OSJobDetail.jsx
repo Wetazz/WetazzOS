@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { Play, Square, Camera, FileText } from "lucide-react";
+import DocumentVault from "@/components/DocumentVault";
 
 export default function OSJobDetail() {
   const { jid } = useParams();
@@ -48,16 +49,29 @@ export default function OSJobDetail() {
   return (
     <div className="p-8 max-w-5xl">
       <div className="text-[#B5FF2E] font-mono text-xs tracking-[0.4em] mb-2">// JOB · {job.job_number}</div>
-      <h1 className="font-display text-4xl">{job.customer?.first_name} {job.customer?.last_name}</h1>
-      <div className="text-zinc-400">{job.vehicle?.year} {job.vehicle?.make} {job.vehicle?.model} · {job.vehicle?.registration}</div>
+      <h1 className="font-display text-4xl">
+        {job.customer && <Link to={`/os/customers/${job.customer.id}`} className="hover:text-[#B5FF2E]" data-testid="job-customer-link">{job.customer.first_name} {job.customer.last_name}</Link>}
+      </h1>
+      <div className="text-zinc-400">
+        {job.vehicle && <Link to={`/os/vehicles/${job.vehicle.id}`} className="hover:text-[#B5FF2E]" data-testid="job-vehicle-link">{job.vehicle.year} {job.vehicle.make} {job.vehicle.model} · {job.vehicle.registration}</Link>}
+      </div>
+      {job.assigned_staff && <div className="text-xs text-zinc-500 mt-1 font-mono">Tech: {job.assigned_staff.first_name} {job.assigned_staff.last_name}</div>}
 
       <div className="mt-6 grid md:grid-cols-3 gap-4">
         <Metric k="Status" v={job.status.replace(/_/g,' ')} />
         <Metric k="Type" v={job.job_type} />
         <Metric k="Priority" v={job.priority} />
-        <Metric k="Labour" v={`${hrs}h @ A$${job.labour_rate}`} />
+        <Metric k="Labour hrs" v={`${hrs}h @ A$${job.labour_rate}`} />
         <Metric k="Bay" v={job.bay || "—"} />
         <Metric k="Class" v={job.private_or_insurance} />
+        <Metric k="Estimated hrs" v={`${(job.labour_estimated_hours||0).toFixed(2)}h`} />
+        <Metric k="Variance" v={`${(job.labour_variance_hours||0)>0?"+":""}${(job.labour_variance_hours||0).toFixed(2)}h`} />
+        <Metric k="Revenue (labour)" v={`A$${(job.labour_revenue||0).toFixed(2)}`} />
+      </div>
+
+      <div className="mt-6 border border-white/10 p-6" data-testid="job-assign-block">
+        <div className="text-xs uppercase tracking-widest text-zinc-400 mb-3">Assignment</div>
+        <AssignForm job={job} onSaved={load} />
       </div>
 
       <div className="mt-6 border border-white/10 p-6">
@@ -130,8 +144,32 @@ export default function OSJobDetail() {
         <div className="text-xs uppercase tracking-widest text-zinc-400 mb-2">Notes</div>
         <div className="text-sm text-zinc-300">{job.notes || "—"}</div>
       </div>
+      <div className="mt-6"><DocumentVault entityType="job" entityId={jid} /></div>
       <style>{`.wz-i{background:#0f0f10;border:1px solid #27272a;padding:.5rem .7rem;color:white;outline:none;font-size:.85rem}.wz-i:focus{border-color:#B5FF2E}`}</style>
     </div>
   );
 }
 function Metric({k,v}){return(<div className="border border-white/10 p-3"><div className="text-[10px] uppercase tracking-widest text-zinc-500">{k}</div><div className="font-mono text-lg">{v}</div></div>);}
+
+function AssignForm({ job, onSaved }) {
+  const [staff, setStaff] = useState([]);
+  const [f, setF] = useState({ assigned_staff_id: job.assigned_staff_id||"", bay: job.bay||"", priority: job.priority||"NORMAL" });
+  useEffect(() => { api.get("/staff").then(r=>setStaff(r.data)); }, []);
+  const save = async () => {
+    try { await api.patch(`/jobs/${job.id}/assign`, f); toast.success("Assigned"); onSaved(); }
+    catch { toast.error("Failed"); }
+  };
+  return (
+    <div className="grid md:grid-cols-4 gap-2">
+      <select className="wz-i" value={f.assigned_staff_id} onChange={e=>setF({...f,assigned_staff_id:e.target.value})} data-testid="job-assign-staff">
+        <option value="">Unassigned</option>
+        {staff.map(s=><option key={s.id} value={s.id}>{s.first_name} {s.last_name} ({s.role})</option>)}
+      </select>
+      <input placeholder="Bay label" className="wz-i" value={f.bay} onChange={e=>setF({...f,bay:e.target.value})} data-testid="job-assign-bay"/>
+      <select className="wz-i" value={f.priority} onChange={e=>setF({...f,priority:e.target.value})} data-testid="job-assign-priority">
+        <option>LOW</option><option>NORMAL</option><option>HIGH</option><option>URGENT</option>
+      </select>
+      <button onClick={save} className="bg-[#B5FF2E] hover:bg-[#C8FF5A] text-black uppercase text-sm font-bold" data-testid="job-assign-save">Save</button>
+    </div>
+  );
+}

@@ -14,7 +14,7 @@ export default function PortalVehicles() {
     if (v.data[0]) setCustomerId(v.data[0].customer_id);
     else {
       // fetch customer for this user
-      try { const cs = await api.get("/customers", { params: { q: me.data.email } }); if (cs.data[0]) setCustomerId(cs.data[0].id); } catch {}
+      try { const cs = await api.get("/customers", { params: { q: me.data.email } }); if (cs.data[0]) setCustomerId(cs.data[0].id); } catch (_e) { /* ignore */ }
     }
   };
   useEffect(() => { load(); }, []);

@@ -25,6 +25,10 @@ import PortalBookings from "@/pages/portal/PortalBookings";
 import PortalJobs from "@/pages/portal/PortalJobs";
 import PortalQuotes from "@/pages/portal/PortalQuotes";
 import PortalInvoices from "@/pages/portal/PortalInvoices";
+import PortalProfile from "@/pages/portal/PortalProfile";
+import PortalMessages from "@/pages/portal/PortalMessages";
+import PortalPayments from "@/pages/portal/PortalPayments";
+import PortalDocuments from "@/pages/portal/PortalDocuments";
 
 import OSLayout from "@/pages/os/OSLayout";
 import OSDashboard from "@/pages/os/OSDashboard";
@@ -44,6 +48,9 @@ import OSParts from "@/pages/os/OSParts";
 import OSSuppliers from "@/pages/os/OSSuppliers";
 import OSCalendar from "@/pages/os/OSCalendar";
 import OSAccounting from "@/pages/os/OSAccounting";
+import OSCustomerDetail from "@/pages/os/OSCustomerDetail";
+import OSVehicleDetail from "@/pages/os/OSVehicleDetail";
+import OSLeads from "@/pages/os/OSLeads";
 
 function Protected({ roles, children }) {
   const user = getUser();
@@ -81,13 +88,20 @@ export default function App() {
             <Route path="jobs" element={<PortalJobs />} />
             <Route path="quotes" element={<PortalQuotes />} />
             <Route path="invoices" element={<PortalInvoices />} />
+            <Route path="profile" element={<PortalProfile />} />
+            <Route path="messages" element={<PortalMessages />} />
+            <Route path="payments" element={<PortalPayments />} />
+            <Route path="documents" element={<PortalDocuments />} />
           </Route>
 
           {/* Staff OS */}
           <Route path="/os" element={<Protected roles={STAFF_ROLES}><OSLayout /></Protected>}>
             <Route index element={<OSDashboard />} />
             <Route path="customers" element={<OSCustomers />} />
+            <Route path="customers/:cid" element={<OSCustomerDetail />} />
             <Route path="vehicles" element={<OSVehicles />} />
+            <Route path="vehicles/:vid" element={<OSVehicleDetail />} />
+            <Route path="leads" element={<OSLeads />} />
             <Route path="bookings" element={<OSBookings />} />
             <Route path="jobs" element={<OSJobsKanban />} />
             <Route path="jobs/:jid" element={<OSJobDetail />} />

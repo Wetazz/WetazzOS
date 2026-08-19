@@ -1,12 +1,13 @@
 import { NavLink, Outlet, useNavigate, Link } from "react-router-dom";
 import { getUser, logout } from "@/lib/api";
-import { LayoutDashboard, Users, Car, Calendar, Wrench, FileText, CreditCard, Inbox, Star, UserCog, Sparkles, LogOut, Package, Truck, BarChart3 } from "lucide-react";
+import { LayoutDashboard, Users, Car, Calendar, Wrench, FileText, CreditCard, Inbox, Star, UserCog, Sparkles, LogOut, Package, Truck, BarChart3, TrendingUp } from "lucide-react";
 
 const NAV = [
   { to: "/os", end: true, label: "Dashboard", icon: LayoutDashboard },
   { to: "/os/jobs", label: "Jobs Kanban", icon: Wrench },
   { to: "/os/calendar", label: "Calendar", icon: Calendar },
   { to: "/os/bookings", label: "Bookings", icon: Calendar },
+  { to: "/os/leads", label: "Leads", icon: TrendingUp },
   { to: "/os/customers", label: "Customers", icon: Users },
   { to: "/os/vehicles", label: "Vehicles", icon: Car },
   { to: "/os/quotes", label: "Quotes", icon: FileText },

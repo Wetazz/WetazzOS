@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate, Link } from "react-router-dom";
 import { getUser, logout } from "@/lib/api";
-import { Car, Calendar, Wrench, FileText, CreditCard, LogOut, Home } from "lucide-react";
+import { Car, Calendar, Wrench, FileText, CreditCard, LogOut, Home, MessageSquare, Folder, UserCircle, DollarSign } from "lucide-react";
 
 const NAV = [
   { to: "/portal", end: true, label: "Overview", icon: Home },
@@ -9,6 +9,10 @@ const NAV = [
   { to: "/portal/jobs", label: "My Jobs", icon: Wrench },
   { to: "/portal/quotes", label: "My Quotes", icon: FileText },
   { to: "/portal/invoices", label: "My Invoices", icon: CreditCard },
+  { to: "/portal/payments", label: "My Payments", icon: DollarSign },
+  { to: "/portal/messages", label: "My Messages", icon: MessageSquare },
+  { to: "/portal/documents", label: "My Documents", icon: Folder },
+  { to: "/portal/profile", label: "My Profile", icon: UserCircle },
 ];
 
 export default function PortalLayout() {

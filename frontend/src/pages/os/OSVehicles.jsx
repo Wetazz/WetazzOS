@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
 export default function OSVehicles() {
   const [rows, setRows] = useState([]);
@@ -12,12 +13,12 @@ export default function OSVehicles() {
       </div>
       <div className="grid md:grid-cols-3 gap-3">
         {rows.map(v => (
-          <div key={v.id} className="border border-white/10 p-4" data-testid={`vehicle-card-${v.id}`}>
+          <Link key={v.id} to={`/os/vehicles/${v.id}`} className="border border-white/10 p-4 hover:border-[#B5FF2E] block" data-testid={`vehicle-card-${v.id}`}>
             <div className="font-display text-xl">{v.year || ""} {v.make} {v.model}</div>
             <div className="font-mono text-xs text-[#B5FF2E] mt-1">{v.registration || "NO REGO"}</div>
             <div className="text-xs text-zinc-500 font-mono">VIN {v.vin || "—"}</div>
             <div className="text-[10px] uppercase tracking-widest text-zinc-500 mt-2">{v.verification}</div>
-          </div>
+          </Link>
         ))}
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 export default function OSCustomers() {
@@ -31,7 +32,7 @@ export default function OSCustomers() {
           <tbody>
             {rows.map(c => (
               <tr key={c.id} className="border-t border-white/10 hover:bg-white/5" data-testid={`customer-row-${c.id}`}>
-                <td className="px-4 py-2">{c.first_name} {c.last_name}</td>
+                <td className="px-4 py-2"><Link to={`/os/customers/${c.id}`} className="hover:text-[#B5FF2E]" data-testid={`customer-link-${c.id}`}>{c.first_name} {c.last_name}</Link>{c.business_name && <div className="text-[10px] text-zinc-500">{c.business_name}</div>}</td>
                 <td className="px-4 py-2 font-mono text-xs">{c.email}</td>
                 <td className="px-4 py-2 font-mono text-xs">{c.phone}</td>
                 <td className="px-4 py-2 text-xs uppercase text-[#B5FF2E]">{c.status}</td>
