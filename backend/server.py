@@ -5,6 +5,7 @@ communications, reviews, staff, AI (Claude Sonnet 5 vision + text), Stripe.
 """
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, UploadFile, File, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -12,7 +13,8 @@ from pydantic import BaseModel, Field, EmailStr, ConfigDict
 from typing import List, Optional, Literal
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-import os, uuid, logging, base64, asyncio, jwt, bcrypt, stripe
+import os, uuid, logging, base64, asyncio, io, jwt, bcrypt, stripe
+import docgen
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -151,6 +153,7 @@ class CustomerIn(BaseModel):
     address: Optional[str] = ""
     customer_type: Optional[str] = "PRIVATE"
     preferred_contact: Optional[str] = "SMS"
+    location_id: Optional[str] = None
     notes: Optional[str] = ""
 
 
@@ -182,6 +185,7 @@ class BookingIn(BaseModel):
     preferred_time: str  # HH:MM
     contact_method: Optional[str] = "SMS"
     bay_kind: Optional[str] = "GENERAL"  # PAINT | PANEL | MECHANICAL | GENERAL
+    location_id: Optional[str] = None
     # Guest booking fields (used only when no logged in customer)
     guest_first_name: Optional[str] = ""
     guest_last_name: Optional[str] = ""
@@ -226,6 +230,7 @@ class QuoteIn(BaseModel):
     deposit_required: float = 0.0
     notes: Optional[str] = ""
     expiry: Optional[str] = None
+    location_id: Optional[str] = None
 
 
 class InvoiceIn(BaseModel):
@@ -236,6 +241,7 @@ class InvoiceIn(BaseModel):
     items: List[QuoteLineItem]
     discount: float = 0.0
     due_date: Optional[str] = None
+    location_id: Optional[str] = None
 
 
 class CommsIn(BaseModel):
@@ -258,9 +264,15 @@ class AiChatIn(BaseModel):
 
 
 class AiPhotoIn(BaseModel):
-    image_base64: str  # raw base64
+    images_base64: List[str] = []          # up to 12 photos
+    image_base64: Optional[str] = None     # back-compat single photo
+    full_name: Optional[str] = ""
+    contact_number: Optional[str] = ""
+    registration: Optional[str] = ""
     vehicle_make: Optional[str] = ""
     vehicle_model: Optional[str] = ""
+    vehicle_year: Optional[str] = ""
+    vehicle_details: Optional[str] = ""
     description: Optional[str] = ""
 
 
@@ -500,7 +512,7 @@ async def create_booking(data: BookingIn, cred: Optional[HTTPAuthorizationCreden
         "service_type": data.service_type, "booking_type": data.booking_type,
         "description": data.description, "preferred_date": data.preferred_date,
         "preferred_time": data.preferred_time, "contact_method": data.contact_method,
-        "bay_kind": data.bay_kind or "GENERAL",
+        "bay_kind": data.bay_kind or "GENERAL", "location_id": data.location_id,
         "photos": data.photos, "status": "REQUESTED", "created_at": now_iso(),
     }
     await db.bookings.insert_one(doc)
@@ -722,7 +734,7 @@ async def create_quote(data: QuoteIn, user=Depends(require_roles(*STAFF_ROLES)))
         "items": [i.model_dump() for i in data.items], "discount": data.discount,
         "subtotal": subtotal, "gst": gst, "total": total,
         "deposit_required": data.deposit_required, "notes": data.notes,
-        "status": "DRAFT", "version": 1, "expiry": data.expiry,
+        "status": "DRAFT", "version": 1, "expiry": data.expiry, "location_id": data.location_id,
         "created_at": now_iso(), "created_by": user["id"],
     }
     await db.quotes.insert_one(doc)
@@ -818,7 +830,7 @@ async def create_invoice(data: InvoiceIn, user=Depends(require_roles(*STAFF_ROLE
         "items": [i.model_dump() for i in data.items], "discount": data.discount,
         "subtotal": subtotal, "gst": gst, "total": total,
         "amount_paid": 0.0, "balance": total, "status": "DRAFT",
-        "due_date": data.due_date, "created_at": now_iso(),
+        "due_date": data.due_date, "location_id": data.location_id, "created_at": now_iso(),
     }
     await db.invoices.insert_one(doc)
     doc.pop("_id", None)
@@ -1157,22 +1169,29 @@ def _llm_chat(system_message: str, session_id: str):
 @api.post("/ai/photo-estimate")
 async def ai_photo_estimate(data: AiPhotoIn):
     from emergentintegrations.llm.chat import UserMessage, ImageContent, TextDelta, StreamDone
+    images = [i for i in (list(data.images_base64) + ([data.image_base64] if data.image_base64 else [])) if i][:12]
+    if not images:
+        raise HTTPException(400, "At least one photo is required")
     chat = _llm_chat(
         "You are WETAZZ AI, a preliminary vehicle damage assessor for an Australian paint, panel and mechanical workshop. "
-        "You look at a customer-supplied photo and return a JSON object with keys: "
+        "You look at the customer-supplied photos (there may be several angles of the SAME vehicle) and return a JSON object with keys: "
         "summary, damaged_components (list), repair_categories (list), preliminary_labour_hours (number), "
         "preliminary_materials_aud (number), preliminary_parts_aud (number), price_low_aud (number), price_high_aud (number), "
         "confidence ('LOW'|'MEDIUM'|'HIGH'), notes. "
-        "Australian pricing conventions; labour @ $135 AUD/hour. This is a PRELIMINARY estimate — you must not represent it as final. "
+        "Australian pricing conventions; labour @ $135 AUD/hour. This is a PRELIMINARY AI estimate — it is NOT confirmed workshop pricing and must be validated by a physical inspection. "
         "Return ONLY the JSON object, no prose.",
         session_id=uid(),
     )
-    img = ImageContent(image_base64=data.image_base64)
-    prompt = f"Vehicle: {data.vehicle_make} {data.vehicle_model}. Customer notes: {data.description or 'none'}. Analyse the visible damage."
+    veh = " ".join(x for x in [data.vehicle_year or "", data.vehicle_make or "", data.vehicle_model or ""] if x).strip() or "unknown vehicle"
+    prompt = (f"Vehicle: {veh}. Registration: {data.registration or 'n/a'}. "
+              f"Extra vehicle details: {data.vehicle_details or 'none'}. "
+              f"Customer notes: {data.description or 'none'}. "
+              f"{len(images)} photo(s) supplied. Analyse the visible damage across all photos.")
+    file_contents = [ImageContent(image_base64=i) for i in images]
     full = ""
     ai_error = None
     try:
-        async for ev in chat.stream_message(UserMessage(text=prompt, file_contents=[img])):
+        async for ev in chat.stream_message(UserMessage(text=prompt, file_contents=file_contents)):
             if isinstance(ev, TextDelta):
                 full += ev.content
             elif isinstance(ev, StreamDone):
@@ -1180,7 +1199,6 @@ async def ai_photo_estimate(data: AiPhotoIn):
     except Exception as e:
         ai_error = str(e)
         log.warning(f"AI photo estimate upstream error: {ai_error}")
-    # Try parse JSON
     import json, re
     parsed = None
     try:
@@ -1189,7 +1207,44 @@ async def ai_photo_estimate(data: AiPhotoIn):
             parsed = json.loads(m.group(0))
     except Exception:
         pass
-    return {"raw": full, "estimate": parsed, "disclaimer": "PRELIMINARY AI ESTIMATE — SUBJECT TO PHYSICAL INSPECTION"}
+    # Persist estimate + create a LEAD so it flows into the CRM (real relational data, no mocks)
+    estimate_id = uid()
+    customer_id = None
+    if data.full_name and data.contact_number:
+        parts = data.full_name.strip().split(" ", 1)
+        first, last = parts[0], (parts[1] if len(parts) > 1 else "")
+        cust = await db.customers.find_one({"phone": data.contact_number})
+        if not cust:
+            cust = {
+                "id": uid(), "first_name": first, "last_name": last, "email": "",
+                "phone": data.contact_number, "business_name": "", "address": "",
+                "customer_type": "PRIVATE", "preferred_contact": "PHONE",
+                "notes": "Created via AI estimate", "status": "LEAD",
+                "created_at": now_iso(), "last_contact": now_iso(),
+            }
+            await db.customers.insert_one(cust)
+        customer_id = cust["id"]
+        await db.leads.insert_one({
+            "id": uid(), "customer_id": customer_id, "source": "AI_ESTIMATE", "stage": "NEW",
+            "subject": f"AI estimate — {veh}", "enquiry": data.description or "",
+            "reference_id": estimate_id, "created_at": now_iso(),
+        })
+    await db.ai_estimates.insert_one({
+        "id": estimate_id, "customer_id": customer_id,
+        "full_name": data.full_name, "contact_number": data.contact_number,
+        "registration": data.registration, "vehicle_make": data.vehicle_make,
+        "vehicle_model": data.vehicle_model, "vehicle_year": data.vehicle_year,
+        "vehicle_details": data.vehicle_details, "description": data.description,
+        "photo_count": len(images), "estimate": parsed, "raw": full,
+        "kind": "AI_ESTIMATE", "created_at": now_iso(),
+    })
+    return {"id": estimate_id, "raw": full, "estimate": parsed,
+            "disclaimer": "PRELIMINARY AI ESTIMATE — NOT CONFIRMED WORKSHOP PRICING · SUBJECT TO PHYSICAL INSPECTION"}
+
+
+@api.get("/ai/estimates")
+async def list_ai_estimates(user=Depends(require_roles(*STAFF_ROLES))):
+    return await db.ai_estimates.find({}, {"_id": 0, "raw": 0}).sort("created_at", -1).to_list(200)
 
 
 @api.post("/ai/assistant")
@@ -1308,10 +1363,295 @@ async def stripe_webhook(request: Request):
 
 
 # ============================================================
+# SETTINGS — business identity + editable terms & conditions
+# ============================================================
+DEFAULT_TERMS_QUOTE = (
+    "1. This quotation is valid for 30 days from the date of issue and is subject to a physical inspection of the vehicle.\n"
+    "2. All prices are in Australian Dollars (AUD) and include GST at 10% where indicated.\n"
+    "3. Any additional damage, parts or faults discovered during repair may require a revised quotation and further written authorisation before work continues.\n"
+    "4. Parts prices and availability are subject to supplier confirmation and may change without notice.\n"
+    "5. A deposit may be required to secure booking and order parts. Deposits are non-refundable once parts have been ordered.\n"
+    "6. Estimated completion times are indicative only and may be affected by parts supply and insurer approvals.\n"
+    "7. Colour matching on repairs is carried out to industry standard; slight variation on adjacent panels may occur."
+)
+DEFAULT_TERMS_INVOICE = (
+    "1. Payment is due on completion of works unless prior written credit terms have been agreed.\n"
+    "2. All prices are in Australian Dollars (AUD) and include GST at 10%.\n"
+    "3. Wetazz Paint Panel & Mechanical retains a statutory lien over the vehicle until the account is paid in full.\n"
+    "4. Goods and parts remain the property of Wetazz Paint Panel & Mechanical until paid for in full.\n"
+    "5. Workmanship is guaranteed against defects in materials and labour for 12 months; the guarantee excludes fair wear and tear, rust and accident damage.\n"
+    "6. Vehicles not collected within 14 days of completion may incur storage fees.\n"
+    "7. Please inspect all repairs on collection; claims must be reported within 7 days."
+)
+DEFAULT_TERMS_RELEASE = (
+    "1. The customer confirms the vehicle and works described above are correct.\n"
+    "2. The vehicle is released only once all accounts are paid in full or agreed credit terms are in place.\n"
+    "3. Wetazz Paint Panel & Mechanical is not liable for personal items left in the vehicle.\n"
+    "4. The customer acknowledges the workshop's statutory lien over the vehicle for unpaid accounts.\n"
+    "5. Any repair concerns must be reported within 7 days of collection so they can be assessed."
+)
+DEFAULT_SETTINGS = {
+    "business_name": "Wetazz Paint Panel & Mechanical",
+    "abn": "",
+    "phone": "+61 2 0000 0000",
+    "email": "Office@wetazz.com.au",
+    "address": "89 Maxwell St, Wellington NSW 2820",
+    "website": "wetazz.com.au",
+    "terms_quote": DEFAULT_TERMS_QUOTE,
+    "terms_invoice": DEFAULT_TERMS_INVOICE,
+    "terms_release": DEFAULT_TERMS_RELEASE,
+}
+
+
+async def get_settings() -> dict:
+    doc = await db.settings.find_one({"id": "business"}, {"_id": 0})
+    merged = dict(DEFAULT_SETTINGS)
+    if doc:
+        merged.update({k: v for k, v in doc.items() if v not in (None, "")})
+    merged["id"] = "business"
+    return merged
+
+
+async def get_primary_location() -> Optional[dict]:
+    loc = await db.locations.find_one({"is_primary": True, "active": True}, {"_id": 0})
+    if not loc:
+        loc = await db.locations.find_one({"active": True}, {"_id": 0})
+    return loc
+
+
+async def ensure_defaults():
+    if not await db.settings.find_one({"id": "business"}):
+        await db.settings.insert_one({"id": "business", **DEFAULT_SETTINGS, "created_at": now_iso()})
+    if await db.locations.count_documents({}) == 0:
+        await db.locations.insert_one({
+            "id": uid(), "name": "Wellington", "address": "89 Maxwell St",
+            "suburb": "Wellington", "state": "NSW", "postcode": "2820",
+            "phone": "+61 2 0000 0000", "is_primary": True, "active": True,
+            "created_at": now_iso(),
+        })
+
+
+@api.get("/settings")
+async def read_settings(user=Depends(require_roles(*STAFF_ROLES))):
+    return await get_settings()
+
+
+class SettingsIn(BaseModel):
+    business_name: Optional[str] = None
+    abn: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    address: Optional[str] = None
+    website: Optional[str] = None
+    terms_quote: Optional[str] = None
+    terms_invoice: Optional[str] = None
+    terms_release: Optional[str] = None
+
+
+@api.patch("/settings")
+async def update_settings(data: SettingsIn, user=Depends(require_roles("OWNER", "ADMIN"))):
+    patch = {k: v for k, v in data.model_dump().items() if v is not None}
+    if patch:
+        await db.settings.update_one({"id": "business"}, {"$set": {**patch, "updated_at": now_iso()}}, upsert=True)
+    return await get_settings()
+
+
+# ============================================================
+# LOCATIONS — configurable workshop locations
+# ============================================================
+class LocationIn(BaseModel):
+    name: str
+    address: Optional[str] = ""
+    suburb: Optional[str] = ""
+    state: Optional[str] = ""
+    postcode: Optional[str] = ""
+    phone: Optional[str] = ""
+    is_primary: bool = False
+    active: bool = True
+
+
+@api.get("/locations")
+async def list_locations():
+    return await db.locations.find({"active": True}, {"_id": 0}).sort("is_primary", -1).to_list(100)
+
+
+@api.post("/locations")
+async def create_location(data: LocationIn, user=Depends(require_roles("OWNER", "ADMIN"))):
+    doc = data.model_dump()
+    doc.update({"id": uid(), "created_at": now_iso()})
+    if doc.get("is_primary"):
+        await db.locations.update_many({}, {"$set": {"is_primary": False}})
+    await db.locations.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.patch("/locations/{lid}")
+async def update_location(lid: str, patch: dict, user=Depends(require_roles("OWNER", "ADMIN"))):
+    allowed = {"name", "address", "suburb", "state", "postcode", "phone", "is_primary", "active"}
+    clean = {k: v for k, v in patch.items() if k in allowed}
+    if clean.get("is_primary"):
+        await db.locations.update_many({}, {"$set": {"is_primary": False}})
+    r = await db.locations.update_one({"id": lid}, {"$set": clean}) if clean else None
+    if r is not None and r.matched_count == 0:
+        raise HTTPException(404, "Location not found")
+    return await db.locations.find_one({"id": lid}, {"_id": 0})
+
+
+@api.delete("/locations/{lid}")
+async def delete_location(lid: str, user=Depends(require_roles("OWNER", "ADMIN"))):
+    await db.locations.update_one({"id": lid}, {"$set": {"active": False}})
+    return {"ok": True}
+
+
+# ============================================================
+# VEHICLE RELEASE FORMS
+# ============================================================
+class ReleaseFormIn(BaseModel):
+    customer_id: str
+    vehicle_id: str
+    job_id: Optional[str] = None
+    location_id: Optional[str] = None
+    odometer: Optional[str] = ""
+    work_summary: Optional[str] = ""
+    amount_due: Optional[float] = 0.0
+    authorisation_text: Optional[str] = ""
+    notes: Optional[str] = ""
+
+
+async def next_release_number() -> str:
+    c = await db.release_forms.count_documents({})
+    return f"RF-{4000 + c + 1}"
+
+
+@api.post("/release-forms")
+async def create_release_form(data: ReleaseFormIn, user=Depends(require_roles(*STAFF_ROLES))):
+    doc = data.model_dump()
+    doc.update({
+        "id": uid(), "release_number": await next_release_number(),
+        "status": "DRAFT", "signed_at": None, "signature_name": None,
+        "created_at": now_iso(), "created_by": user["id"],
+    })
+    await db.release_forms.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.get("/release-forms")
+async def list_release_forms(user=Depends(require_roles(*STAFF_ROLES))):
+    rows = await db.release_forms.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    for r in rows:
+        r["customer"] = await db.customers.find_one({"id": r["customer_id"]}, {"_id": 0, "first_name": 1, "last_name": 1})
+        r["vehicle"] = await db.vehicles.find_one({"id": r["vehicle_id"]}, {"_id": 0, "make": 1, "model": 1, "registration": 1})
+    return rows
+
+
+@api.get("/release-forms/{rid}")
+async def get_release_form(rid: str, user=Depends(require_roles(*STAFF_ROLES))):
+    r = await db.release_forms.find_one({"id": rid}, {"_id": 0})
+    if not r:
+        raise HTTPException(404, "Not found")
+    r["customer"] = await db.customers.find_one({"id": r["customer_id"]}, {"_id": 0})
+    r["vehicle"] = await db.vehicles.find_one({"id": r["vehicle_id"]}, {"_id": 0})
+    return r
+
+
+@api.patch("/release-forms/{rid}/sign")
+async def sign_release_form(rid: str, body: dict, user=Depends(require_roles(*STAFF_ROLES))):
+    rf = await db.release_forms.find_one({"id": rid})
+    if not rf:
+        raise HTTPException(404, "Release form not found")
+    if rf.get("status") == "SIGNED":
+        raise HTTPException(400, "Release form already signed")
+    name = body.get("signature_name", "")
+    await db.release_forms.update_one({"id": rid}, {"$set": {
+        "status": "SIGNED", "signature_name": name, "signed_at": now_iso()}})
+    return {"ok": True}
+
+
+# ============================================================
+# BRANDED PDF DOCUMENTS  (quotes · invoices · release forms)
+# ============================================================
+def _pdf_response(pdf_bytes: bytes, filename: str):
+    return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf",
+                             headers={"Content-Disposition": f'inline; filename="{filename}"'})
+
+
+async def _location_for(doc) -> Optional[dict]:
+    if doc and doc.get("location_id"):
+        loc = await db.locations.find_one({"id": doc["location_id"]}, {"_id": 0})
+        if loc:
+            return loc
+    return await get_primary_location()
+
+
+async def _assert_owns(entity, user):
+    if user["role"] == "CUSTOMER":
+        cust = await db.customers.find_one({"user_id": user["id"]})
+        if not cust or cust["id"] != entity.get("customer_id"):
+            raise HTTPException(403, "Forbidden")
+
+
+@api.get("/quotes/{qid}/pdf")
+async def quote_pdf(qid: str, user=Depends(current_user)):
+    q = await db.quotes.find_one({"id": qid}, {"_id": 0})
+    if not q:
+        raise HTTPException(404, "Not found")
+    await _assert_owns(q, user)
+    settings = await get_settings()
+    customer = await db.customers.find_one({"id": q["customer_id"]}, {"_id": 0}) or {}
+    vehicle = await db.vehicles.find_one({"id": q.get("vehicle_id")}, {"_id": 0})
+    location = await _location_for(q)
+    doc = {"number": q.get("quote_number"), "date": q.get("created_at"), "expiry": q.get("expiry"),
+           "items": q.get("items", []), "subtotal": q.get("subtotal"), "discount": q.get("discount"),
+           "gst": q.get("gst"), "total": q.get("total"), "deposit_required": q.get("deposit_required"),
+           "notes": q.get("notes")}
+    pdf = docgen.generate_pdf("QUOTE", settings, customer, vehicle, doc, location, settings.get("terms_quote", ""))
+    return _pdf_response(pdf, f"{q.get('quote_number', 'quote')}.pdf")
+
+
+@api.get("/invoices/{iid}/pdf")
+async def invoice_pdf(iid: str, user=Depends(current_user)):
+    inv = await db.invoices.find_one({"id": iid}, {"_id": 0})
+    if not inv:
+        raise HTTPException(404, "Not found")
+    await _assert_owns(inv, user)
+    settings = await get_settings()
+    customer = await db.customers.find_one({"id": inv["customer_id"]}, {"_id": 0}) or {}
+    vehicle = await db.vehicles.find_one({"id": inv.get("vehicle_id")}, {"_id": 0})
+    location = await _location_for(inv)
+    doc = {"number": inv.get("invoice_number"), "date": inv.get("created_at"), "due_date": inv.get("due_date"),
+           "items": inv.get("items", []), "subtotal": inv.get("subtotal"), "discount": inv.get("discount"),
+           "gst": inv.get("gst"), "total": inv.get("total"), "amount_paid": inv.get("amount_paid"),
+           "balance": inv.get("balance")}
+    pdf = docgen.generate_pdf("INVOICE", settings, customer, vehicle, doc, location, settings.get("terms_invoice", ""))
+    return _pdf_response(pdf, f"{inv.get('invoice_number', 'invoice')}.pdf")
+
+
+@api.get("/release-forms/{rid}/pdf")
+async def release_form_pdf(rid: str, user=Depends(require_roles(*STAFF_ROLES))):
+    r = await db.release_forms.find_one({"id": rid}, {"_id": 0})
+    if not r:
+        raise HTTPException(404, "Not found")
+    settings = await get_settings()
+    customer = await db.customers.find_one({"id": r["customer_id"]}, {"_id": 0}) or {}
+    vehicle = await db.vehicles.find_one({"id": r.get("vehicle_id")}, {"_id": 0})
+    location = await _location_for(r)
+    job = await db.jobs.find_one({"id": r.get("job_id")}, {"_id": 0}) if r.get("job_id") else None
+    doc = {"number": r.get("release_number"), "date": r.get("created_at"),
+           "odometer": r.get("odometer"), "work_summary": r.get("work_summary"),
+           "amount_due": r.get("amount_due"), "authorisation_text": r.get("authorisation_text"),
+           "job_number": job.get("job_number") if job else None}
+    pdf = docgen.generate_pdf("RELEASE", settings, customer, vehicle, doc, location, settings.get("terms_release", ""))
+    return _pdf_response(pdf, f"{r.get('release_number', 'release')}.pdf")
+
+
+# ============================================================
 # SEED — Owner + demo data
 # ============================================================
 @api.post("/seed")
 async def seed(force: bool = False):
+    await ensure_defaults()
     if not force and await db.users.count_documents({"role": "OWNER"}) > 0:
         return {"ok": True, "seeded": False}
     owner_id = uid()
@@ -1335,12 +1675,14 @@ async def seed(force: bool = False):
 # ============================================================
 @api.get("/business")
 async def business_info():
+    s = await get_settings()
     return {
-        "name": "Wetazz Paint & Panel Mechanical",
+        "name": s.get("business_name", "Wetazz Paint Panel & Mechanical"),
         "tagline": "Paint · Panel · Mechanical",
-        "phone": "+61 2 0000 0000",
-        "email": "Office@wetazz.com.au",
-        "address": "89 Maxwell St, Wellington NSW, Australia",
+        "phone": s.get("phone", "+61 2 0000 0000"),
+        "email": s.get("email", "Office@wetazz.com.au"),
+        "address": s.get("address", "89 Maxwell St, Wellington NSW 2820"),
+        "website": s.get("website", "wetazz.com.au"),
         "hours": {"Mon-Fri": "8:00 – 17:30", "Sat": "9:00 – 13:00", "Sun": "Closed"},
         "services": [
             {"category": "MECHANICAL", "items": ["Log book servicing", "Brakes", "Suspension", "Tyres", "Batteries", "Diagnostics", "Cooling systems", "Engine repairs", "Mechanical inspections"]},
@@ -1760,6 +2102,7 @@ async def startup():
     await db.vehicles.create_index("customer_id")
     await db.jobs.create_index("customer_id")
     await db.jobs.create_index("status")
+    await ensure_defaults()
     log.info("WETAZZ OS started")
 
 

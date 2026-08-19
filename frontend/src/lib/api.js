@@ -32,4 +32,14 @@ export function logout() {
   localStorage.removeItem("wz_user");
 }
 
+export async function openDoc(path) {
+  const token = localStorage.getItem("wz_token");
+  const res = await fetch(`${API}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) throw new Error("Failed to load document");
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank");
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
 export const STAFF_ROLES = ["OWNER", "ADMIN", "SERVICE_ADVISOR", "TECHNICIAN", "STAFF"];

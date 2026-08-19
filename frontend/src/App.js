@@ -51,6 +51,8 @@ import OSAccounting from "@/pages/os/OSAccounting";
 import OSCustomerDetail from "@/pages/os/OSCustomerDetail";
 import OSVehicleDetail from "@/pages/os/OSVehicleDetail";
 import OSLeads from "@/pages/os/OSLeads";
+import OSReleaseForms from "@/pages/os/OSReleaseForms";
+import OSSettings from "@/pages/os/OSSettings";
 
 function Protected({ roles, children }) {
   const user = getUser();
@@ -108,6 +110,8 @@ export default function App() {
             <Route path="jobs/:jid/pack" element={<OSJobPack />} />
             <Route path="quotes" element={<OSQuotes />} />
             <Route path="invoices" element={<OSInvoices />} />
+            <Route path="release-forms" element={<OSReleaseForms />} />
+            <Route path="settings" element={<OSSettings />} />
             <Route path="inbox" element={<OSInbox />} />
             <Route path="reviews" element={<OSReviews />} />
             <Route path="staff" element={<OSStaff />} />

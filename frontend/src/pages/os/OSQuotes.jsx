@@ -1,19 +1,20 @@
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, openDoc } from "@/lib/api";
 import { toast } from "sonner";
 
 export default function OSQuotes() {
   const [rows, setRows] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [vehicles, setVehicles] = useState([]);
+  const [locations, setLocations] = useState([]);
   const [parts, setParts] = useState([]);
   const [partQuery, setPartQuery] = useState("");
   const [show, setShow] = useState(false);
-  const [f, setF] = useState({ customer_id:"", vehicle_id:"", deposit_required:"0", notes:"" });
+  const [f, setF] = useState({ customer_id:"", vehicle_id:"", location_id:"", deposit_required:"0", notes:"" });
   const [items, setItems] = useState([{ kind:"LABOUR", description:"Labour", quantity:1, unit_price:135, total:135 }]);
 
   const load = () => api.get("/quotes").then(r => setRows(r.data));
-  useEffect(() => { load(); api.get("/customers").then(r=>setCustomers(r.data)); }, []);
+  useEffect(() => { load(); api.get("/customers").then(r=>setCustomers(r.data)); api.get("/locations").then(r=>setLocations(r.data)); }, []);
   useEffect(() => { if (f.customer_id) api.get("/vehicles", { params: { customer_id: f.customer_id } }).then(r=>setVehicles(r.data)); }, [f.customer_id]);
   useEffect(() => { const t=setTimeout(()=>api.get("/parts", { params: { q: partQuery }}).then(r=>setParts(r.data.slice(0,8))), 150); return ()=>clearTimeout(t); }, [partQuery]);
 
@@ -30,6 +31,7 @@ export default function OSQuotes() {
     } catch(e){ toast.error(e.response?.data?.detail || "Failed"); }
   };
   const send = async (id) => { await api.patch(`/quotes/${id}/status`, { status: "SENT" }); toast.success("Sent to customer"); load(); };
+  const pdf = async (id) => { try { await openDoc(`/quotes/${id}/pdf`); } catch { toast.error("Could not open PDF"); } };
 
   const subtotal = items.reduce((s,i)=>s + Number(i.total||0), 0);
   const gst = +(subtotal * 0.1).toFixed(2);
@@ -47,6 +49,7 @@ export default function OSQuotes() {
           <div className="grid md:grid-cols-3 gap-3">
             <select required data-testid="qt-customer" value={f.customer_id} onChange={e=>setF({...f,customer_id:e.target.value,vehicle_id:""})} className="wz-i"><option value="">Customer...</option>{customers.map(c=><option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>)}</select>
             <select required data-testid="qt-vehicle" value={f.vehicle_id} onChange={e=>setF({...f,vehicle_id:e.target.value})} className="wz-i"><option value="">Vehicle...</option>{vehicles.map(v=><option key={v.id} value={v.id}>{v.make} {v.model}</option>)}</select>
+            <select data-testid="qt-location" value={f.location_id} onChange={e=>setF({...f,location_id:e.target.value})} className="wz-i"><option value="">Location...</option>{locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select>
             <input placeholder="Deposit A$" value={f.deposit_required} onChange={e=>setF({...f,deposit_required:e.target.value})} className="wz-i" data-testid="qt-deposit"/>
           </div>
 
@@ -92,6 +95,7 @@ export default function OSQuotes() {
             </div>
             <div className="flex items-center gap-3">
               <div className="text-xs uppercase text-[#B5FF2E]">{q.status}</div>
+              <button data-testid={`qt-pdf-${q.id}`} onClick={()=>pdf(q.id)} className="px-3 py-1 border border-white/20 hover:border-[#B5FF2E] uppercase text-xs">PDF / Print</button>
               {q.status === "DRAFT" && <button data-testid={`qt-send-${q.id}`} onClick={()=>send(q.id)} className="px-3 py-1 bg-[#B5FF2E] hover:bg-[#C8FF5A] text-black uppercase text-xs">Send</button>}
             </div>
           </div>

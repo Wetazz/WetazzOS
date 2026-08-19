@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate, Link } from "react-router-dom";
 import { getUser, logout } from "@/lib/api";
-import { LayoutDashboard, Users, Car, Calendar, Wrench, FileText, CreditCard, Inbox, Star, UserCog, Sparkles, LogOut, Package, Truck, BarChart3, TrendingUp } from "lucide-react";
+import { LayoutDashboard, Users, Car, Calendar, Wrench, FileText, CreditCard, Inbox, Star, UserCog, Sparkles, LogOut, Package, Truck, BarChart3, TrendingUp, FileSignature, Settings } from "lucide-react";
 
 const NAV = [
   { to: "/os", end: true, label: "Dashboard", icon: LayoutDashboard },
@@ -12,6 +12,7 @@ const NAV = [
   { to: "/os/vehicles", label: "Vehicles", icon: Car },
   { to: "/os/quotes", label: "Quotes", icon: FileText },
   { to: "/os/invoices", label: "Invoices", icon: CreditCard },
+  { to: "/os/release-forms", label: "Release Forms", icon: FileSignature },
   { to: "/os/parts", label: "Parts", icon: Package },
   { to: "/os/suppliers", label: "Suppliers", icon: Truck },
   { to: "/os/accounting", label: "Accounting", icon: BarChart3 },
@@ -19,6 +20,7 @@ const NAV = [
   { to: "/os/reviews", label: "Reviews", icon: Star },
   { to: "/os/staff", label: "Staff", icon: UserCog },
   { to: "/os/assistant", label: "WETAZZ AI", icon: Sparkles },
+  { to: "/os/settings", label: "Settings", icon: Settings },
 ];
 
 export default function OSLayout() {
@@ -28,7 +30,7 @@ export default function OSLayout() {
     <div className="min-h-screen flex bg-black text-white">
       <aside className="w-60 border-r border-white/10 bg-[#0a0a0a] flex flex-col">
         <Link to="/" className="flex items-center gap-2 p-4 border-b border-white/10">
-          <img src="https://customer-assets-jai6qajn.emergentagent.net/job_workshop-os-3/artifacts/52gfsp8x_1000014390.png" alt="Wetazz" className="h-8 w-8 object-contain" />
+          <img src="/wetazz-logo-web.png" alt="Wetazz" className="h-8 w-8 object-contain" />
           <div><div className="font-display leading-none"><span className="text-[#B5FF2E]">WETAZZ</span> · OS</div><div className="text-[10px] tracking-[0.3em] text-zinc-500 uppercase">{user?.role}</div></div>
         </Link>
         <nav className="flex-1 py-3 space-y-0.5 overflow-y-auto">

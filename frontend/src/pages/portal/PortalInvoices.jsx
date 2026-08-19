@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, openDoc } from "@/lib/api";
 import { toast } from "sonner";
 export default function PortalInvoices() {
   const [rows, setRows] = useState([]);
@@ -21,7 +21,10 @@ export default function PortalInvoices() {
               <div className="text-xs uppercase tracking-widest text-[#B5FF2E]">{i.status}</div>
             </div>
             <div className="font-mono text-lg mt-1">Total A${i.total?.toFixed(2)} · Balance A${i.balance?.toFixed(2)}</div>
-            {i.balance > 0 && <button data-testid={`invoice-pay-${i.id}`} onClick={()=>pay(i)} className="mt-3 px-4 py-2 bg-[#B5FF2E] hover:bg-[#C8FF5A] uppercase text-sm font-bold">Pay balance</button>}
+            <div className="flex gap-2 mt-3">
+              <button data-testid={`invoice-pdf-${i.id}`} onClick={()=>openDoc(`/invoices/${i.id}/pdf`).catch(()=>toast.error("Could not open PDF"))} className="px-3 py-1 border border-white/20 hover:border-[#B5FF2E] uppercase text-xs">PDF / Print</button>
+              {i.balance > 0 && <button data-testid={`invoice-pay-${i.id}`} onClick={()=>pay(i)} className="px-4 py-1 bg-[#B5FF2E] hover:bg-[#C8FF5A] uppercase text-xs font-bold text-black">Pay balance</button>}
+            </div>
           </div>
         ))}
         {!rows.length && <div className="text-zinc-500">No invoices yet.</div>}

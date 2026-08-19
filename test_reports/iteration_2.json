@@ -1,0 +1,53 @@
+{
+  "summary": "Full retest of WETAZZ OS iteration-2 features (locations, settings/T&Cs, AI photo estimate, branded PDFs for quote/invoice/release form, PDF RBAC) plus frontend E2E of public /quote, /os/settings, /os/quotes, /os/release-forms, /os/invoices and customer portal. Backend: 43/43 pytest checks pass (17 new in test_wetazz_v2.py + 26 regression in test_wetazz_workflow.py — the previously reported booking-slot cascade did NOT recur). Frontend: every requested flow passed, including real Claude vision AI estimate rendering with the amber disclaimer, photo previews/remove, validation toasts, settings persistence, add/remove location, quote creation with location dropdown, release form create -> PDF -> Mark signed (SIGNED), and PDF/Print opening a new tab from OS quotes/invoices and portal quotes/invoices. PDF content verified by text extraction: branded header (business name/address/phone/email/website), PREPARED FOR + VEHICLE + WORKSHOP LOCATION blocks, line items, GST (10%) totals, editable T&Cs, and signature/date areas on the release form. Previously reported signup 500 (ObjectId) and AI photo-estimate 500 are both FIXED. No backend errors in supervisor logs during the run.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PATCH /api/locations/{lid}", "issue": "Accepts a raw dict body (no Pydantic model) and returns only {ok:true} — no 404 when lid does not exist (PATCH/DELETE on a non-existent id returns 200). Consider a LocationPatch model + 404 on no-match, and returning the updated document."},
+      {"endpoint": "PATCH /api/release-forms/{rid}/sign", "issue": "Raw dict body, no Pydantic validation, returns 200 even for a non-existent rid (no 404) and does not guard against re-signing an already SIGNED form."},
+      {"endpoint": "GET /api/locations", "issue": "Unauthenticated (public). Fine for the public site, but it leaks workshop address/phone list; confirm this is intended."},
+      {"endpoint": "POST /api/ai/photo-estimate", "issue": "Unauthenticated and creates customer+lead records on every call — no rate limit / captcha, so it is spammable and each call burns LLM credits."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Public footer (PublicLayout.jsx line 71)", "issues": ["Contact phone '+61 3 9999 0000' and email 'hello@wetazz.com.au' are hardcoded and contradict the editable business settings (+61 2 0000 0000 / Office@wetazz.com.au) that now drive the PDFs. Footer should read from GET /api/business or /api/settings so edits in /os/settings propagate. Same hardcoded email in OSJobPack.jsx line 23."]},
+      {"screen": "PDF documents", "issues": ["ABN line is omitted because settings.abn defaults to empty. For an Australian TAX INVOICE the ABN is effectively mandatory — consider seeding a placeholder ABN and/or warning in /os/settings when it is blank."]},
+      {"screen": "Generated PDFs", "issues": ["Every PDF is ~239 KB even for a one-line quote because the full-resolution logo bitmap is embedded uncompressed; consider a downscaled logo asset."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_wetazz_v2.py",
+    "/app/backend/tests/test_wetazz_workflow.py",
+    "/app/test_reports/pytest/pytest_results_iter2.xml",
+    "/app/tests/setup_portal.py",
+    "/app/tests/pdf_inspect.py"
+  ],
+  "action_items": [
+    "Drive the public footer contact block (and OSJobPack email) from business settings instead of hardcoded values",
+    "Add 404 handling + Pydantic bodies to PATCH /api/locations/{lid} and PATCH /api/release-forms/{rid}/sign",
+    "Consider abuse protection (rate limit) on the unauthenticated POST /api/ai/photo-estimate since it writes customers/leads and consumes LLM credits",
+    "Optional: seed/require ABN so TAX INVOICE PDFs are compliant"
+  ],
+  "critical_code_review_comments": [
+    "/app/backend/server.py is 2103 lines — split into routers (auth, crm, jobs, docs/pdf, settings/locations, ai, payments) before it grows further.",
+    "GET /api/release-forms and /api/quotes do an N+1 customer/vehicle lookup per row (await inside a loop); use a single $in query or aggregation for lists of 500.",
+    "update_location/sign_release_form take untyped `dict` bodies — inconsistent with the Pydantic validation used everywhere else.",
+    "AI estimate creates a customer keyed only on phone number (db.customers.find_one({'phone': ...})) — no normalisation, so '+61400...' vs '0400...' will duplicate customers."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_wetazz_v2.py (new)",
+    "/app/tests/setup_portal.py (new, portal seed helper)",
+    "/app/tests/pdf_inspect.py (new, PDF text verification)",
+    "/app/tests/mkimg.py (new, generates test damage photos)"
+  ],
+  "success_rate": {"backend": "100% (43/43 pytest)", "frontend": "100% of the 5 requested flows (public /quote, /os/settings, /os/quotes, /os/release-forms, /os/invoices + portal quotes/invoices)"},
+  "seed_data_creation": "Test data created (system is no longer empty): customers TEST_Pdf Customer, TEST QaEstimator, QA Frontend Tester, QA Portal; vehicles QAP992/QAPRT1; quotes Q-2002..Q-2004; invoices INV-3001/INV-3002; release forms RF-4002/RF-4003 (RF-4003 SIGNED); 2 AI_ESTIMATE leads; portal user qa_portal_user@example.com / Wetazz2026!. A temporary location QA_TempSite and the TEST_CLAUSE_QA/QA_UI_CLAUSE terms edits were rolled back — settings and locations are back to Wellington-only/primary with original T&Cs. If the app must ship empty, wipe these TEST_/QA_ records.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "owner@wetazz.com.au / Wetazz2026! (OWNER); tech@wetazz.com.au / Wetazz2026! (TECHNICIAN); qa_portal_user@example.com / Wetazz2026! (CUSTOMER, has Q-2004 + INV-3002 for portal PDF testing)",
+  "context_for_next_testing_agent": "Run `pytest /app/backend/tests/ -q` (pytest.ini already sets -n 2 --dist loadscope) — 43 tests, all green as of iteration 2. test_wetazz_v2.py covers locations RBAC, settings RBAC/persistence, AI photo-estimate (uses PIL-generated JPEGs, NOT 1x1 pixels — tiny images used to make Claude fail), quote/invoice/release PDFs and cross-customer 403. Frontend gotchas: login button is [data-testid=login-submit] (no type=submit); text is CSS-uppercased so compare lowercase when using inner_text; OS list/dropdown data loads async — wait ~2-3s after navigation before asserting option counts (a 2s wait gave a false 'location dropdown empty' failure); openDoc() opens a blob in a new tab so use `page.context.expect_page()`. Untested this round: bookings/calendar (use unique dates), payments/Stripe, jobs kanban, insurance pack, documents upload, reviews.",
+  "rca_of_the_issue": "No product defects reproduced. Two initial script failures were my own test-timing/selector issues: (1) 'photo counter missing' — inner_text returns CSS-uppercased 'PHOTOS (0/12)'; (2) 'location dropdown empty' in /os/quotes — the /locations fetch had not resolved when the assertion ran immediately after opening the form; both passed after adding waits/case-insensitive comparison. The previously reported signup 500 and AI photo-estimate 500 are confirmed fixed (signup returns 200 with token; photo-estimate returns 200 with parsed estimate JSON from Claude vision)."
+}
