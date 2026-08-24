@@ -4,6 +4,7 @@ All documents share one branded layout (logo, workshop/customer/vehicle blocks,
 line items, GST totals, standard terms & conditions) so branding never diverges.
 """
 import io
+import base64
 from datetime import datetime
 from pathlib import Path
 
@@ -33,6 +34,34 @@ DEFAULT_AUTHORISATION = (
     "to retain the vehicle until all accounts are paid in full, and I accept the vehicle is being "
     "released to me in satisfactory condition."
 )
+
+
+def _sig_image_from_dataurl(data_url, width=150):
+    try:
+        b64 = data_url.split(",", 1)[1] if "," in data_url else data_url
+        raw = base64.b64decode(b64)
+        img = RLImage(io.BytesIO(raw))
+        ratio = img.imageHeight / float(img.imageWidth)
+        img.drawWidth = width
+        img.drawHeight = min(width * ratio, 70)
+        return img
+    except Exception:
+        return None
+
+
+def _captured_signature(st, sig, heading="AUTHORISED &amp; ACCEPTED BY CUSTOMER"):
+    out = [Paragraph(heading, st["label"]), Spacer(1, 4)]
+    img = _sig_image_from_dataurl(sig.get("data", "")) if sig else None
+    if img:
+        out.append(img)
+    else:
+        out.append(Spacer(1, 34))
+    out.append(Table([[""]], colWidths=[180], style=TableStyle([("LINEABOVE", (0, 0), (-1, -1), 0.7, INK)])))
+    name = (sig.get("name") or "").replace("&", "&amp;") if sig else ""
+    meta = " · ".join(x for x in [name, _fmt_date(sig.get("signed_at")) if sig else "",
+                                  (sig.get("method") or "").title() if sig else ""] if x)
+    out.append(Paragraph(meta or "Customer signature &amp; date", st["small"]))
+    return out
 
 
 def _money(v):
@@ -232,7 +261,7 @@ def _signature_block(st):
     return tbl
 
 
-def generate_pdf(kind, business, customer, vehicle=None, doc=None, location=None, terms=""):
+def generate_pdf(kind, business, customer, vehicle=None, doc=None, location=None, terms="", signature=None):
     doc = doc or {}
     st = _styles()
     buf = io.BytesIO()
@@ -248,6 +277,12 @@ def generate_pdf(kind, business, customer, vehicle=None, doc=None, location=None
         flow += [_items_table(st, doc.get("items", [])), Spacer(1, 12), _totals(st, doc, kind)]
         if doc.get("notes"):
             flow += [Spacer(1, 12), Paragraph("NOTES", st["label"]), Spacer(1, 3), Paragraph(doc["notes"], st["body"])]
+        if kind == "QUOTE":
+            flow += [Spacer(1, 14), Paragraph("AUTHORISATION", st["label"]), Spacer(1, 3),
+                     Paragraph(DEFAULT_AUTHORISATION, st["body"]), Spacer(1, 8)]
+            flow += _captured_signature(st, signature)
+        elif kind == "INVOICE" and signature:
+            flow += [Spacer(1, 14)] + _captured_signature(st, signature, heading="AUTHORISED BY CUSTOMER")
     else:  # RELEASE
         if doc.get("work_summary"):
             flow += [Paragraph("WORK CARRIED OUT", st["label"]), Spacer(1, 3),

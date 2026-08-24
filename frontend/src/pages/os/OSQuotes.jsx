@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, openDoc } from "@/lib/api";
 import { toast } from "sonner";
+import { SignatureModal } from "@/components/SignatureModal";
 
 export default function OSQuotes() {
   const [rows, setRows] = useState([]);
@@ -10,6 +11,7 @@ export default function OSQuotes() {
   const [parts, setParts] = useState([]);
   const [partQuery, setPartQuery] = useState("");
   const [show, setShow] = useState(false);
+  const [signing, setSigning] = useState(null);
   const [f, setF] = useState({ customer_id:"", vehicle_id:"", location_id:"", deposit_required:"0", notes:"" });
   const [items, setItems] = useState([{ kind:"LABOUR", description:"Labour", quantity:1, unit_price:135, total:135 }]);
 
@@ -32,6 +34,11 @@ export default function OSQuotes() {
   };
   const send = async (id) => { await api.patch(`/quotes/${id}/status`, { status: "SENT" }); toast.success("Sent to customer"); load(); };
   const pdf = async (id) => { try { await openDoc(`/quotes/${id}/pdf`); } catch { toast.error("Could not open PDF"); } };
+  const submitSignature = async (dataUrl, name) => {
+    try { await api.post(`/quotes/${signing.id}/sign`, { signature_data: dataUrl, signature_name: name, method: "ONSITE" });
+      toast.success("Signed & authorised"); setSigning(null); load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Failed to sign"); }
+  };
 
   const subtotal = items.reduce((s,i)=>s + Number(i.total||0), 0);
   const gst = +(subtotal * 0.1).toFixed(2);
@@ -94,13 +101,15 @@ export default function OSQuotes() {
               <div className="text-xs text-zinc-500 font-mono">{q.vehicle?.make} {q.vehicle?.model} · Total A${q.total?.toFixed(2)}</div>
             </div>
             <div className="flex items-center gap-3">
-              <div className="text-xs uppercase text-[#B5FF2E]">{q.status}</div>
+              <div className="text-xs uppercase text-[#B5FF2E]">{q.status}{q.signature ? " · SIGNED" : ""}</div>
               <button data-testid={`qt-pdf-${q.id}`} onClick={()=>pdf(q.id)} className="px-3 py-1 border border-white/20 hover:border-[#B5FF2E] uppercase text-xs">PDF / Print</button>
               {q.status === "DRAFT" && <button data-testid={`qt-send-${q.id}`} onClick={()=>send(q.id)} className="px-3 py-1 bg-[#B5FF2E] hover:bg-[#C8FF5A] text-black uppercase text-xs">Send</button>}
+              {!q.signature && <button data-testid={`qt-sign-${q.id}`} onClick={()=>setSigning(q)} className="px-3 py-1 border border-[#B5FF2E] text-[#B5FF2E] hover:bg-[#B5FF2E] hover:text-black uppercase text-xs">Sign onsite</button>}
             </div>
           </div>
         ))}
       </div>
+      <SignatureModal open={!!signing} onClose={()=>setSigning(null)} onSubmit={submitSignature} title={`Authorise quote ${signing?.quote_number || ""}`} defaultName={signing ? `${signing.customer?.first_name||""} ${signing.customer?.last_name||""}`.trim() : ""} />
       <style>{`.wz-i{background:#0f0f10;border:1px solid #27272a;padding:.55rem .75rem;color:white;outline:none;font-size:.85rem}.wz-i:focus{border-color:#B5FF2E}`}</style>
     </div>
   );

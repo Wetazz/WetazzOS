@@ -15,6 +15,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import os, uuid, logging, base64, asyncio, io, jwt, bcrypt, stripe
 import docgen
+import email_utils
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -23,6 +24,8 @@ MONGO_URL = os.environ['MONGO_URL']
 DB_NAME = os.environ['DB_NAME']
 JWT_SECRET = os.environ['JWT_SECRET']
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY', '')
+EMERGENT_EMAIL_KEY = os.environ.get('EMERGENT_EMAIL_KEY', '')
+APP_BASE_URL = os.environ.get('APP_BASE_URL', '')
 STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
 STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
 RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
@@ -36,7 +39,7 @@ stripe.api_key = STRIPE_SECRET_KEY
 
 def provider_configured(channel: str) -> bool:
     if channel == "EMAIL":
-        return bool(RESEND_API_KEY)
+        return bool(EMERGENT_EMAIL_KEY)
     if channel == "SMS":
         return bool(TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_FROM)
     if channel in ("CHAT", "PHONE", "INTERNAL", "WEBSITE"):
@@ -44,19 +47,54 @@ def provider_configured(channel: str) -> bool:
     return False
 
 
+async def send_sms(to: str, body: str) -> bool:
+    """Send an SMS via Twilio when configured. Returns True on success.
+    When not configured this is a no-op (logged-only mode)."""
+    if not (TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_FROM and to):
+        return False
+    from twilio.rest import Client
+
+    def _send():
+        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+        client.messages.create(to=to, from_=TWILIO_FROM, body=body)
+    try:
+        await asyncio.to_thread(_send)
+        return True
+    except Exception as e:
+        log.warning(f"Twilio SMS send failed: {e}")
+        return False
+
+
 async def auto_log_comm(customer_id: str, channel: str, body: str, workflow_kind: str,
                         subject: str = "", job_id: Optional[str] = None,
                         reference_id: Optional[str] = None, direction: str = "OUT"):
-    """Log an outbound communication. If provider not configured, status='NOT_CONFIGURED'
-    (the message is stored so it appears in inbox but is NOT sent). This preserves
-    the audit trail per user's spec — 'do NOT fake successful message delivery'."""
+    """Log an outbound communication AND attempt real delivery.
+    EMAIL sends via Emergent-managed Resend; SMS via Twilio when configured.
+    Status reflects the true outcome: SENT, FAILED, or NOT_CONFIGURED — never faked."""
     if not customer_id:
         return None
     configured = provider_configured(channel)
+    status = "NOT_CONFIGURED"
+    provider_id = None
+    if configured and direction == "OUT":
+        cust = await db.customers.find_one({"id": customer_id}, {"_id": 0, "email": 1, "phone": 1})
+        try:
+            if channel == "EMAIL" and cust and cust.get("email"):
+                html = email_utils.render_email(body, heading=subject)
+                provider_id = await email_utils.send_email(
+                    to=cust["email"], subject=subject or "Wetazz Paint Panel & Mechanical", html=html)
+                status = "SENT"
+            elif channel == "SMS" and cust and cust.get("phone"):
+                status = "SENT" if await send_sms(cust["phone"], body) else "FAILED"
+            else:
+                status = "QUEUED"
+        except Exception as e:
+            log.warning(f"Comm delivery failed ({channel}): {e}")
+            status = "FAILED"
     doc = {
         "id": uid(), "customer_id": customer_id, "job_id": job_id,
         "channel": channel, "direction": direction, "body": body, "subject": subject,
-        "status": "QUEUED" if configured else "NOT_CONFIGURED",
+        "status": status, "provider_id": provider_id,
         "provider": {"EMAIL": "resend", "SMS": "twilio"}.get(channel, "internal"),
         "workflow_kind": workflow_kind, "reference_id": reference_id,
         "created_at": now_iso(), "sent_by": "SYSTEM",
@@ -813,6 +851,38 @@ async def update_quote_status(qid: str, body: dict, user=Depends(current_user)):
 # ============================================================
 # INVOICES
 # ============================================================
+class QuoteSignIn(BaseModel):
+    signature_data: str          # PNG data URL captured from the signature pad
+    signature_name: str
+    method: Optional[str] = "PORTAL"   # PORTAL | ONSITE
+
+
+@api.post("/quotes/{qid}/sign")
+async def sign_quote(qid: str, data: QuoteSignIn, user=Depends(current_user)):
+    q = await db.quotes.find_one({"id": qid})
+    if not q:
+        raise HTTPException(404, "Not found")
+    if user["role"] == "CUSTOMER":
+        cust = await db.customers.find_one({"user_id": user["id"]})
+        if not cust or cust["id"] != q["customer_id"]:
+            raise HTTPException(403, "Forbidden")
+    sig = {"data": data.signature_data, "name": data.signature_name,
+           "method": data.method or "PORTAL", "signed_at": now_iso(), "signed_by": user["id"]}
+    await db.quotes.update_one({"id": qid}, {"$set": {"signature": sig, "status": "APPROVED", "updated_at": now_iso()}})
+    if q.get("job_id"):
+        await db.jobs.update_one({"id": q["job_id"]}, {"$set": {"authorisation_signature": sig, "status": "AUTHORISED", "updated_at": now_iso()}})
+    await db.audit_log.insert_one({"id": uid(), "user_id": user["id"], "entity": "quote", "entity_id": qid, "action": f"signed:{sig['method']}", "at": now_iso()})
+    cust = await db.customers.find_one({"id": q["customer_id"]}, {"_id": 0})
+    if cust and q.get("deposit_required", 0) > 0:
+        first = cust.get("first_name", "there")
+        msg = f"Thanks {first}! To lock in your booking, please pay the A${q['deposit_required']:.2f} deposit for quote {q['quote_number']}."
+        if cust.get("email"):
+            await auto_log_comm(cust["id"], "EMAIL", msg, "DEPOSIT_REQUIRED", subject="Deposit required — Wetazz", reference_id=qid, job_id=q.get("job_id"))
+        if cust.get("phone"):
+            await auto_log_comm(cust["id"], "SMS", msg, "DEPOSIT_REQUIRED", reference_id=qid, job_id=q.get("job_id"))
+    return {"ok": True, "signature": sig}
+
+
 async def next_invoice_number() -> str:
     c = await db.invoices.count_documents({})
     return f"INV-{3000 + c + 1}"
@@ -1025,7 +1095,7 @@ async def analytics(user=Depends(require_roles(*STAFF_ROLES))):
 @api.get("/integrations/status")
 async def integrations_status(user=Depends(require_roles(*STAFF_ROLES))):
     return {
-        "email": {"provider": "resend", "configured": bool(RESEND_API_KEY), "sender": RESEND_SENDER},
+        "email": {"provider": "resend", "configured": bool(EMERGENT_EMAIL_KEY), "sender": os.environ.get("EMAIL_FROM_NAME", "Wetazz Paint Panel & Mechanical"), "managed": True},
         "sms": {"provider": "twilio", "configured": bool(TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_FROM), "from": TWILIO_FROM or None},
         "stripe": {"provider": "stripe", "configured": bool(STRIPE_SECRET_KEY), "mode": os.environ.get("STRIPE_MODE", "test")},
         "rego_lookup": {"provider": "rego_lookup", "configured": bool(REGO_LOOKUP_API_KEY)},
@@ -1363,6 +1433,74 @@ async def stripe_webhook(request: Request):
 
 
 # ============================================================
+# SHOP — merchandise cart checkout (Stripe) with pickup / shipping
+# ============================================================
+MERCH = {
+    "wz-tee": {"name": "Wetazz Workshop Tee", "price": 45.0, "sku": "WZ-TEE-01"},
+    "wz-cap": {"name": "Wetazz Cap", "price": 35.0, "sku": "WZ-CAP-01"},
+    "wz-hoodie": {"name": "Wetazz Hoodie", "price": 89.0, "sku": "WZ-HOOD-01"},
+}
+SHIPPING_FLAT = 14.99
+FREE_SHIP_THRESHOLD = 150.0
+
+
+class ShopItemIn(BaseModel):
+    id: str
+    quantity: int = Field(1, ge=1, le=50)
+
+
+class ShopCheckoutIn(BaseModel):
+    items: List[ShopItemIn]
+    fulfilment: str = "PICKUP"   # PICKUP | SHIP
+    origin_url: str
+
+
+@api.get("/shop/products")
+async def shop_products():
+    return {"products": [{"id": k, **v} for k, v in MERCH.items()],
+            "shipping_flat": SHIPPING_FLAT, "free_ship_threshold": FREE_SHIP_THRESHOLD}
+
+
+@api.post("/shop/checkout")
+async def shop_checkout(data: ShopCheckoutIn):
+    if not data.items:
+        raise HTTPException(400, "Cart is empty")
+    line_items, subtotal = [], 0.0
+    for it in data.items:
+        prod = MERCH.get(it.id)
+        if not prod:
+            raise HTTPException(400, f"Unknown product {it.id}")
+        subtotal += prod["price"] * it.quantity
+        line_items.append({
+            "price_data": {"currency": "aud", "product_data": {"name": f"Wetazz {prod['name']}"},
+                           "unit_amount": int(round(prod["price"] * 100))},
+            "quantity": it.quantity,
+        })
+    shipping = SHIPPING_FLAT if (data.fulfilment == "SHIP" and subtotal < FREE_SHIP_THRESHOLD) else 0.0
+    if shipping > 0:
+        line_items.append({
+            "price_data": {"currency": "aud", "product_data": {"name": "Shipping"},
+                           "unit_amount": int(round(shipping * 100))},
+            "quantity": 1,
+        })
+    total = round(subtotal + shipping, 2)
+    session = stripe.checkout.Session.create(
+        mode="payment", line_items=line_items,
+        success_url=f"{data.origin_url}/payment/success?session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{data.origin_url}/shop",
+        metadata={"kind": "SHOP", "fulfilment": data.fulfilment},
+    )
+    await db.payment_transactions.insert_one({
+        "session_id": session.id, "user_id": None, "kind": "SHOP", "reference_id": None,
+        "fulfilment": data.fulfilment, "amount_cents": int(round(total * 100)), "currency": "aud",
+        "status": "initiated", "payment_status": "pending",
+        "created_at": now_iso(), "updated_at": now_iso(),
+    })
+    return {"checkout_url": session.url, "session_id": session.id,
+            "subtotal": round(subtotal, 2), "shipping": shipping, "total": total}
+
+
+# ============================================================
 # SETTINGS — business identity + editable terms & conditions
 # ============================================================
 DEFAULT_TERMS_QUOTE = (
@@ -1372,7 +1510,8 @@ DEFAULT_TERMS_QUOTE = (
     "4. Parts prices and availability are subject to supplier confirmation and may change without notice.\n"
     "5. A deposit may be required to secure booking and order parts. Deposits are non-refundable once parts have been ordered.\n"
     "6. Estimated completion times are indicative only and may be affected by parts supply and insurer approvals.\n"
-    "7. Colour matching on repairs is carried out to industry standard; slight variation on adjacent panels may occur."
+    "7. Colour matching on repairs is carried out to industry standard; slight variation on adjacent panels may occur.\n"
+    "8. Any parts to be ordered require a minimum 30% deposit of the invoice total, and may require parts to be paid in full before the order proceeds."
 )
 DEFAULT_TERMS_INVOICE = (
     "1. Payment is due on completion of works unless prior written credit terms have been agreed.\n"
@@ -1381,7 +1520,8 @@ DEFAULT_TERMS_INVOICE = (
     "4. Goods and parts remain the property of Wetazz Paint Panel & Mechanical until paid for in full.\n"
     "5. Workmanship is guaranteed against defects in materials and labour for 12 months; the guarantee excludes fair wear and tear, rust and accident damage.\n"
     "6. Vehicles not collected within 14 days of completion may incur storage fees.\n"
-    "7. Please inspect all repairs on collection; claims must be reported within 7 days."
+    "7. Please inspect all repairs on collection; claims must be reported within 7 days.\n"
+    "8. Any parts to be ordered require a minimum 30% deposit of the invoice total, and may require parts to be paid in full before the order proceeds."
 )
 DEFAULT_TERMS_RELEASE = (
     "1. The customer confirms the vehicle and works described above are correct.\n"
@@ -1606,7 +1746,7 @@ async def quote_pdf(qid: str, user=Depends(current_user)):
            "items": q.get("items", []), "subtotal": q.get("subtotal"), "discount": q.get("discount"),
            "gst": q.get("gst"), "total": q.get("total"), "deposit_required": q.get("deposit_required"),
            "notes": q.get("notes")}
-    pdf = docgen.generate_pdf("QUOTE", settings, customer, vehicle, doc, location, settings.get("terms_quote", ""))
+    pdf = docgen.generate_pdf("QUOTE", settings, customer, vehicle, doc, location, settings.get("terms_quote", ""), signature=q.get("signature"))
     return _pdf_response(pdf, f"{q.get('quote_number', 'quote')}.pdf")
 
 
@@ -1624,7 +1764,14 @@ async def invoice_pdf(iid: str, user=Depends(current_user)):
            "items": inv.get("items", []), "subtotal": inv.get("subtotal"), "discount": inv.get("discount"),
            "gst": inv.get("gst"), "total": inv.get("total"), "amount_paid": inv.get("amount_paid"),
            "balance": inv.get("balance")}
-    pdf = docgen.generate_pdf("INVOICE", settings, customer, vehicle, doc, location, settings.get("terms_invoice", ""))
+    sig = None
+    if inv.get("quote_id"):
+        q = await db.quotes.find_one({"id": inv["quote_id"]}, {"_id": 0, "signature": 1})
+        sig = q.get("signature") if q else None
+    if not sig and inv.get("job_id"):
+        job = await db.jobs.find_one({"id": inv["job_id"]}, {"_id": 0, "authorisation_signature": 1})
+        sig = job.get("authorisation_signature") if job else None
+    pdf = docgen.generate_pdf("INVOICE", settings, customer, vehicle, doc, location, settings.get("terms_invoice", ""), signature=sig)
     return _pdf_response(pdf, f"{inv.get('invoice_number', 'invoice')}.pdf")
 
 
@@ -1656,8 +1803,8 @@ async def seed(force: bool = False):
         return {"ok": True, "seeded": False}
     owner_id = uid()
     await db.users.insert_one({
-        "id": owner_id, "email": "owner@wetazz.com.au", "password": hash_pw("Wetazz2026!"),
-        "first_name": "Sam", "last_name": "Wetazz", "phone": "+61400000001",
+        "id": owner_id, "email": "aaronsmithard309@gmail.com", "password": hash_pw("Wetazz2026!"),
+        "first_name": "Aaron", "last_name": "Smith", "phone": "+61400000001",
         "role": "OWNER", "active": True, "created_at": now_iso(),
     })
     tech_id = uid()
@@ -1667,7 +1814,7 @@ async def seed(force: bool = False):
         "role": "TECHNICIAN", "hourly_cost": 45.0, "selling_rate": 135.0,
         "skills": ["Paint", "Panel"], "active": True, "created_at": now_iso(),
     })
-    return {"ok": True, "seeded": True, "owner_email": "owner@wetazz.com.au", "owner_password": "Wetazz2026!"}
+    return {"ok": True, "seeded": True, "owner_email": "aaronsmithard309@gmail.com", "owner_password": "Wetazz2026!"}
 
 
 # ============================================================
